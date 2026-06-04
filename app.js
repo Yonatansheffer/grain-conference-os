@@ -25,6 +25,8 @@ let filterState = { vertical: [], region: [], status: [] };
 let sortState = { key: "score", direction: "desc" };
 let calendarDate = new Date("2026-06-01T00:00:00");
 let clusterConfig = { regions: [], windowDays: 30 };
+let speechRecognition = null;
+let isRecordingScribble = false;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -621,6 +623,9 @@ function setupCapture() {
   ["firstName", "lastName", "company", "email"].forEach((id) => {
     $(`#${id}`).addEventListener("input", renderMatchPreview);
   });
+  $("#parseScribble").addEventListener("click", parseFloorScribble);
+  $("#showReviewForm").addEventListener("click", () => revealLeadForm());
+  $("#recordScribble").addEventListener("click", toggleScribbleRecording);
   $("#leadForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const lead = {
@@ -642,10 +647,175 @@ function setupCapture() {
     state.leads.push(lead);
     saveState();
     $("#leadForm").reset();
+    $("#scribbleInput").value = "";
+    $("#scribbleStatus").textContent = "";
+    hideLeadForm();
     $("#sentStrong").checked = true;
     renderAll();
     alert("Lead saved. Relationship tracking updated.");
   });
+}
+
+async function parseFloorScribble() {
+  const raw = $("#scribbleInput").value.trim();
+  if (!raw) {
+    $("#scribbleStatus").textContent = "Add a scribble first.";
+    return;
+  }
+  $("#scribbleStatus").textContent = state.ai.key ? "Parsing with AI..." : "Parsing locally...";
+  let parsed;
+  try {
+    parsed = state.ai.key ? await parseScribbleWithAi(raw) : parseScribbleLocally(raw);
+  } catch (error) {
+    console.warn("AI parse failed, using local parser", error);
+    parsed = parseScribbleLocally(raw);
+    $("#scribbleStatus").textContent = "AI unavailable. Local draft ready.";
+  }
+  applyParsedLead(parsed, raw);
+  revealLeadForm();
+  renderMatchPreview();
+  $("#scribbleStatus").textContent = state.ai.key ? "AI draft ready." : "Local draft ready.";
+}
+
+async function parseScribbleWithAi(raw) {
+  const conferences = state.conferences.map((c) => ({ id: c.id, name: c.name, city: c.city, region: c.region, aliases: [c.name.toLowerCase(), c.city.toLowerCase()] }));
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${state.ai.key}`
+    },
+    body: JSON.stringify({
+      model: state.ai.model || "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: "Extract a conference lead from messy sales notes. Return only JSON with keys: firstName,lastName,company,title,email,phone,conferenceId,vertical,urgency,sentiment,painPoints,nextStep,notes. Use null for unknown. sentiment must be Strong, Medium, or Weak. urgency must be Immediate, This quarter, Exploring, or Not a fit. Choose conferenceId only from the provided conference list."
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ raw, conferences })
+        }
+      ]
+    })
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const data = await response.json();
+  return JSON.parse(data.choices[0].message.content);
+}
+
+function parseScribbleLocally(raw) {
+  const email = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
+  const phone = raw.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0] || "";
+  const company = titleCase(extractAfter(raw, /\b(?:at|from)\s+([A-Za-z0-9&.\- ]{2,40}?)(?=,|\.|\s+at\s+|\s+his\s+|\s+her\s+|\s+their\s+|\s+wants|\s+struggl|$)/i));
+  const title = titleCase(extractAfter(raw, /\b((?:vp|vice president|head|director|cfo|finance lead|treasury lead|manager)(?:\s+(?!at\b|from\b)[A-Za-z/&-]+){0,4})\b/i));
+  const nameMatch = raw.match(/\b(?:met|spoke with|talked to|conversation with)\s+([A-Za-z]+)\s+([A-Za-z]+)/i);
+  const firstName = titleCase(nameMatch?.[1] || "");
+  const lastName = titleCase(nameMatch?.[2] || "");
+  const conference = findConferenceFromText(raw) || state.conferences[0];
+  const vertical = inferVertical(raw);
+  const urgency = /demo|next month|this month|urgent|asap|immediate/i.test(raw) ? "This quarter" : /not a fit|no budget/i.test(raw) ? "Not a fit" : "Exploring";
+  const sentiment = /demo|urgent|wants|asked|budget|cfo|treasury/i.test(raw) ? "Strong" : "Medium";
+  const nextStep = extractAfter(raw, /\b(?:wants|asked for|next step is|follow up with)\s+([^.;]+)/i) || "";
+  const painPoints = extractAfter(raw, /\b(?:struggling with|pain is|problem is|needs|concerned about)\s+(.+?)(?=,\s*wants|\s+wants|\.|;|$)/i) || "";
+  return { firstName, lastName, company, title, email, phone, conferenceId: conference.id, vertical, urgency, sentiment, painPoints, nextStep, notes: "" };
+}
+
+function extractAfter(text, regex) {
+  const match = text.match(regex);
+  return match?.[1]?.trim().replace(/\s+/g, " ") || "";
+}
+
+function titleCase(text) {
+  return String(text || "").replace(/\w\S*/g, (word) => {
+    if (/^(VP|CFO|CEO|CTO|COO)$/i.test(word)) return word.toUpperCase();
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+}
+
+function inferVertical(text) {
+  if (/travel|airline|hotel|corridor|wholesaler/i.test(text)) return "Travel";
+  if (/payment|psp|merchant|settlement|payout/i.test(text)) return "Payments";
+  if (/bank|treasury/i.test(text)) return "Banking";
+  if (/saas|platform|software/i.test(text)) return "SaaS";
+  return "Fintech";
+}
+
+function applyParsedLead(parsed, raw) {
+  const fullName = [parsed.firstName, parsed.lastName].filter(Boolean).join(" ");
+  if (!parsed.firstName && !parsed.lastName && parsed.name) {
+    const parts = String(parsed.name).trim().split(/\s+/);
+    parsed.firstName = parts[0] || "";
+    parsed.lastName = parts.slice(1).join(" ");
+  }
+  $("#firstName").value = parsed.firstName || "";
+  $("#lastName").value = parsed.lastName || "";
+  $("#company").value = parsed.company || "";
+  $("#title").value = parsed.title || "";
+  $("#email").value = parsed.email || "";
+  $("#phone").value = parsed.phone || "";
+  $("#leadConference").value = state.conferences.some((c) => c.id === parsed.conferenceId) ? parsed.conferenceId : guessConferenceId(raw);
+  $("#leadVertical").value = [...$("#leadVertical").options].some((o) => o.value === parsed.vertical) ? parsed.vertical : inferVertical(raw);
+  $("#urgency").value = [...$("#urgency").options].some((o) => o.value === parsed.urgency) ? parsed.urgency : "Exploring";
+  const sentiment = ["Strong", "Medium", "Weak"].includes(parsed.sentiment) ? parsed.sentiment : "Medium";
+  $(`input[name='sentiment'][value='${sentiment}']`).checked = true;
+  $("#nextStep").value = parsed.nextStep || "";
+  const extractedNotes = [...new Set([parsed.painPoints, parsed.notes].filter(Boolean).map((item) => String(item).trim()))].join(" ");
+  $("#notes").value = `${extractedNotes ? `${extractedNotes}\n\n` : ""}Raw floor scribble: ${raw}`;
+}
+
+function guessConferenceId(raw) {
+  return findConferenceFromText(raw)?.id || state.conferences[0]?.id || "";
+}
+
+function findConferenceFromText(text) {
+  const normalizedText = normalize(text);
+  return state.conferences.find((c) => {
+    const name = normalize(c.name);
+    const compactName = name.replace(/20/g, "2020");
+    return normalizedText.includes(name) || normalizedText.includes(compactName) || normalizedText.includes(normalize(c.city));
+  });
+}
+
+function revealLeadForm() {
+  $("#leadForm").classList.remove("review-hidden");
+}
+
+function hideLeadForm() {
+  $("#leadForm").classList.add("review-hidden");
+}
+
+function toggleScribbleRecording() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    $("#scribbleStatus").textContent = "Speech capture is not supported in this browser.";
+    return;
+  }
+  if (!speechRecognition) {
+    speechRecognition = new SpeechRecognition();
+    speechRecognition.continuous = true;
+    speechRecognition.interimResults = true;
+    speechRecognition.lang = "en-US";
+    speechRecognition.onresult = (event) => {
+      const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
+      $("#scribbleInput").value = transcript.trim();
+    };
+    speechRecognition.onerror = () => {
+      $("#scribbleStatus").textContent = "Recording stopped.";
+      $("#recordScribble").classList.remove("recording");
+      isRecordingScribble = false;
+    };
+    speechRecognition.onend = () => {
+      $("#recordScribble").classList.remove("recording");
+      if (isRecordingScribble) speechRecognition.start();
+    };
+  }
+  isRecordingScribble = !isRecordingScribble;
+  $("#recordScribble").classList.toggle("recording", isRecordingScribble);
+  $("#scribbleStatus").textContent = isRecordingScribble ? "Recording..." : "Recording stopped.";
+  if (isRecordingScribble) speechRecognition.start();
+  else speechRecognition.stop();
 }
 
 function createId() {

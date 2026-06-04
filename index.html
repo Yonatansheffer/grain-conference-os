@@ -139,8 +139,30 @@
         </section>
 
         <section id="capture" class="view">
-          <form id="leadForm" class="capture-layout">
+          <div class="floor-scribble panel">
+            <div class="scribble-head">
+              <div>
+                <h3>Floor Scribble</h3>
+                <p class="muted">Drop the messy note here. We will structure it before save.</p>
+              </div>
+              <button id="recordScribble" class="icon-button" type="button" aria-label="Record floor scribble">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8"/></svg>
+              </button>
+            </div>
+            <textarea id="scribbleInput" rows="6" placeholder="met dan shapiro VP finance at ebury at money2020 usa, his email is dan@ebury.com..."></textarea>
+            <div class="scribble-actions">
+              <button id="parseScribble" class="primary-button" type="button">Smart-fill lead</button>
+              <button id="showReviewForm" class="ghost-button" type="button">Edit fields</button>
+              <span id="scribbleStatus" class="muted"></span>
+            </div>
+          </div>
+
+          <form id="leadForm" class="capture-layout review-hidden">
             <div class="capture-main">
+              <div class="review-heading">
+                <h3>Review lead</h3>
+                <span class="muted">Verify, correct, then save.</span>
+              </div>
               <label>
                 Conference
                 <select id="leadConference" required></select>
