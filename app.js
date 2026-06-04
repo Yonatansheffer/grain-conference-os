@@ -5,11 +5,18 @@ const SIDEBAR_MAX = 380;
 const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist"];
 const TEAM_OPTIONS = ["Maya", "Noah", "Lior", "Dana", "Alex"];
 const PAGE_TITLES = {
-  conferences: "Conference prioritization",
-  planning: "Conference attendance planning",
-  capture: "Show-floor lead capture",
-  relationships: "Relationship intelligence",
-  settings: "Integration settings"
+  conferences: "Conferences",
+  planning: "Planning",
+  capture: "Capture",
+  relationships: "Relationships",
+  settings: "Settings"
+};
+const PAGE_DESCRIPTIONS = {
+  conferences: "Prioritize events by ICP fit, coverage needs, and expected pipeline value.",
+  planning: "Track the event calendar, spot coverage gaps, and tune trip-cluster rules.",
+  capture: "Log high-signal conversations quickly while reps are on the conference floor.",
+  relationships: "Review repeat contacts, relationship arcs, and recommended next steps.",
+  settings: "Configure optional AI assistance and HubSpot export or sync settings."
 };
 
 const state = migrateState(loadState());
@@ -151,8 +158,8 @@ function renderNav() {
       $$(".view").forEach((v) => v.classList.remove("active"));
       button.classList.add("active");
       $(`#${button.dataset.view}`).classList.add("active");
-      $("#viewTitle").textContent = button.querySelector(".nav-label")?.textContent || button.textContent;
       $("#pageTitle").textContent = PAGE_TITLES[button.dataset.view] || "Grain Conference Tool";
+      $("#pageDescription").textContent = PAGE_DESCRIPTIONS[button.dataset.view] || "";
       renderAll();
     });
   });
@@ -497,25 +504,32 @@ function scoreNarrative(c) {
 }
 
 function renderPlanning() {
-  $("#coverageSummary").textContent = `${state.conferences.filter((c) => c.status === "Committed").length} committed events`;
-  renderCalendar();
+  try {
+    $("#coverageSummary").textContent = `${state.conferences.filter((c) => c.status === "Committed").length} committed events`;
+    renderCalendar();
 
-  const clusters = findClusters();
-  $("#clusterSummary").textContent = `${clusterConfig.windowDays}-day window`;
-  $("#clusters").innerHTML = clusters.length
-    ? clusters.map((cluster) => `<div class="cluster"><strong>${cluster.city || cluster.region} cluster</strong><span>${cluster.events.map((e) => `${e.name} (${formatDateRange(e)})`).join(" | ")}</span></div>`).join("")
-    : "<p class='muted'>No clusters found.</p>";
+    const clusters = findClusters();
+    $("#clusterSummary").textContent = `${clusterConfig.windowDays}-day window`;
+    $("#clusters").innerHTML = clusters.length
+      ? clusters.map((cluster) => `<div class="cluster"><strong>${cluster.city || cluster.region} cluster</strong><span>${cluster.events.map((e) => `${e.name} (${formatDateRange(e)})`).join(" | ")}</span></div>`).join("")
+      : "<p class='muted'>No clusters found.</p>";
 
-  const verticals = ["Payments", "Travel", "Fintech", "SaaS"];
-  $("#gaps").innerHTML = verticals
-    .map((v) => {
-      const relevant = state.conferences.filter((c) => c.verticals.includes(v));
-      const committed = relevant.filter((c) => c.status === "Committed");
-      const avg = relevant.length ? Math.round(relevant.reduce((sum, c) => sum + scoreConference(c), 0) / relevant.length) : 0;
-      const gap = avg >= 68 && committed.length < 2;
-      return `<div class="gap"><strong>${v}</strong><p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}.</p><p class="${gap ? "heat" : "muted"}">${gap ? "Under-invested: add coverage or piggyback." : "Coverage looks proportional."}</p></div>`;
-    })
-    .join("");
+    const verticals = ["Payments", "Travel", "Fintech", "SaaS"];
+    $("#gaps").innerHTML = verticals
+      .map((v) => {
+        const relevant = state.conferences.filter((c) => c.verticals.includes(v));
+        const committed = relevant.filter((c) => c.status === "Committed");
+        const avg = relevant.length ? Math.round(relevant.reduce((sum, c) => sum + scoreConference(c), 0) / relevant.length) : 0;
+        const gap = avg >= 68 && committed.length < 2;
+        return `<div class="gap"><strong>${v}</strong><p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}.</p><p class="${gap ? "heat" : "muted"}">${gap ? "Under-invested: add coverage or piggyback." : "Coverage looks proportional."}</p></div>`;
+      })
+      .join("");
+  } catch (error) {
+    console.error("Planning render failed", error);
+    $("#eventCalendar").innerHTML = `<div class="empty-state"><strong>Planning could not load.</strong><span>Reset demo data or refresh the page to rebuild the event calendar.</span></div>`;
+    $("#clusters").innerHTML = "";
+    $("#gaps").innerHTML = "";
+  }
 }
 
 function renderCalendar() {
