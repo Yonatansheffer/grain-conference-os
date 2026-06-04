@@ -13,6 +13,10 @@
   --primary: #0976a8;
   --primary-dark: #063c5a;
   --primary-soft: #d7f5ff;
+  --slate-soft: #edf3f5;
+  --teal-soft: #dff7f1;
+  --teal: #15766f;
+  --lavender-soft: #f0efff;
   --green: #16735b;
   --green-2: #dff6ef;
   --blue: #0b7fb7;
@@ -1040,12 +1044,54 @@ tbody tr:hover {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 14px;
+  background: linear-gradient(135deg, #ffffff 0%, #f7fdff 100%);
 }
 
 .relationship .actions {
   display: grid;
   gap: 8px;
   min-width: 210px;
+}
+
+.relationship-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.relationship-title strong {
+  margin: 0;
+}
+
+.relationship-summary {
+  color: var(--primary-dark);
+  font-weight: 750;
+}
+
+.copy-context-button {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #c7e7f3;
+  border-radius: 8px;
+  background: var(--brand-3);
+  color: var(--primary);
+}
+
+.copy-context-button:hover {
+  background: var(--primary-soft);
+}
+
+.copy-context-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .next-steps {
@@ -1058,6 +1104,59 @@ tbody tr:hover {
   text-align: left;
   padding: 8px 10px;
   min-height: 36px;
+  border-color: #c8e4ee;
+  background: #f8fdff;
+}
+
+.next-steps .ghost-button:hover {
+  transform: translateY(-1px);
+}
+
+.next-steps .action-gmail,
+.next-steps .action-demo {
+  background: var(--primary-soft);
+  border-color: #9ddff4;
+  color: var(--primary-dark);
+}
+
+.next-steps .action-linkedin {
+  background: var(--slate-soft);
+  border-color: #c9d8dd;
+  color: #315365;
+}
+
+.next-steps .action-enrich {
+  background: var(--teal-soft);
+  border-color: #b9e7dc;
+  color: var(--teal);
+}
+
+.next-steps .action-qualify,
+.next-steps .action-nurture {
+  background: var(--lavender-soft);
+  border-color: #d8d5f6;
+  color: #40466f;
+}
+
+.lead-enrichment {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #cfe8ee;
+  border-radius: 8px;
+  background: #f8fdff;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.lead-enrichment:empty {
+  display: none;
+}
+
+.lead-enrichment strong {
+  color: var(--primary-dark);
+  margin: 0;
 }
 
 .heat {

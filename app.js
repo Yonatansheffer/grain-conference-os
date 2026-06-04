@@ -171,7 +171,7 @@ function relationshipVerdict(group) {
   const immediate = group.filter((l) => ["Immediate", "This quarter"].includes(l.urgency)).length;
   const conferences = new Set(group.map((l) => l.conferenceId)).size;
   const hasBudgetConcern = group.some((l) => /budget|benchmark|curious|exploring/i.test(l.notes));
-  if (strong >= 2 || immediate >= 2) return "Warming relationship: ask for a concrete buying meeting.";
+  if (strong >= 2 || immediate >= 2) return "Warming relationship: schedule a focused demo call with the right commercial and treasury stakeholders.";
   if (conferences >= 2 && hasBudgetConcern) return "Repeat interest, not yet pain-confirmed: qualify budget and owner before more nurturing.";
   return "Known face: keep context visible, but avoid over-weighting the repeat count.";
 }
@@ -625,7 +625,10 @@ function renderRelationships() {
     ? groups.map(renderRelationship).join("")
     : "<div class='panel'><p class='muted'>No repeat contacts yet. Capture a lead and this view will update automatically.</p></div>";
   $$("[data-next-step]").forEach((button) => {
-    button.addEventListener("click", () => handleNextStep(button.dataset.nextStep, button.dataset.group));
+    button.addEventListener("click", () => handleNextStep(button.dataset.nextStep, button.dataset.group, button));
+  });
+  $$("[data-copy-context]").forEach((button) => {
+    button.addEventListener("click", () => copyRelationshipContext(button.dataset.copyContext));
   });
 }
 
@@ -635,16 +638,22 @@ function renderRelationship(group) {
   const encodedId = encodeURIComponent(group.map((lead) => lead.id).join(","));
   return `<div class="relationship">
     <div>
-      <strong>${latest.firstName} ${latest.lastName} at ${latest.company}</strong>
-      <p>${relationshipVerdict(group)}</p>
+      <div class="relationship-title">
+        <strong>${latest.firstName} ${latest.lastName} at ${latest.company}</strong>
+        <button class="copy-context-button" type="button" title="Copy relationship context" aria-label="Copy relationship context" data-copy-context="${encodedId}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h10v12H8z"/><path d="M6 16H4V4h12v2"/></svg>
+        </button>
+      </div>
+      <p class="relationship-summary">${relationshipVerdict(group)}</p>
       <p class="muted">${group.length} encounters: ${conferences.join(" -> ")}</p>
       <p class="muted">${group.map((l) => `${l.title || "Unknown title"}: ${l.notes}`).join(" ")}</p>
+      <div class="lead-enrichment" aria-live="polite"></div>
     </div>
     <div class="actions">
       <span class="pill ${latest.sentiment === "Strong" ? "tier-a" : "tier-b"}">${latest.sentiment}</span>
       <div class="next-steps">
         <span class="muted">Next steps</span>
-        ${relationshipNextSteps(group).map((step) => `<button class="ghost-button" type="button" data-next-step="${step.action}" data-group="${encodedId}">${step.label}</button>`).join("")}
+        ${relationshipNextSteps(group).map((step) => `<button class="ghost-button action-${step.action}" type="button" data-next-step="${step.action}" data-group="${encodedId}">${step.label}</button>`).join("")}
       </div>
     </div>
   </div>`;
@@ -654,13 +663,14 @@ function relationshipNextSteps(group) {
   const verdict = relationshipVerdict(group);
   const steps = [{ action: "gmail", label: "Draft Email Follow-up" }];
   if (/Warming relationship/i.test(verdict)) {
-    steps.push({ action: "meeting", label: "Book buying meeting" });
+    steps.push({ action: "demo", label: "Schedule Demo Call" });
   } else if (/budget|owner/i.test(verdict)) {
     steps.push({ action: "qualify", label: "Qualify budget owner" });
   } else {
     steps.push({ action: "nurture", label: "Add nurture task" });
   }
-  steps.push({ action: "copy", label: "Copy context" });
+  steps.push({ action: "linkedin", label: "Connect on LinkedIn" });
+  steps.push({ action: "enrich", label: "Enrich Lead Data" });
   return steps;
 }
 
@@ -873,21 +883,37 @@ function createId() {
   return `lead-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function handleNextStep(action, encodedIds) {
+async function handleNextStep(action, encodedIds, button) {
   const group = decodeLeadGroup(encodedIds);
   if (action === "gmail") {
     openGmailDraft(group);
     return;
   }
+  if (action === "demo") {
+    openDemoCalendarEvent(group);
+    return;
+  }
+  if (action === "linkedin") {
+    openLinkedInSearch(group);
+    return;
+  }
+  if (action === "enrich") {
+    await enrichLeadData(group, button);
+    return;
+  }
   const context = buildRelationshipContext(group);
   navigator.clipboard?.writeText(context);
   const labels = {
-    meeting: "Buying meeting context copied.",
     qualify: "Budget qualification context copied.",
-    nurture: "Nurture task context copied.",
-    copy: "Relationship context copied."
+    nurture: "Nurture task context copied."
   };
   alert(labels[action] || "Context copied.");
+}
+
+function copyRelationshipContext(encodedIds) {
+  const group = decodeLeadGroup(encodedIds);
+  navigator.clipboard?.writeText(buildRelationshipContext(group));
+  alert("Relationship context copied.");
 }
 
 function decodeLeadGroup(encodedIds) {
@@ -920,6 +946,110 @@ function openGmailDraft(group) {
   url.searchParams.set("su", draft.subject);
   url.searchParams.set("body", draft.body);
   window.open(url.toString(), "_blank", "noopener,noreferrer");
+}
+
+function openDemoCalendarEvent(group) {
+  const latest = group[group.length - 1];
+  const conference = state.conferences.find((c) => c.id === latest.conferenceId);
+  const start = new Date(Date.now() + 7 * 86400000);
+  start.setHours(10, 0, 0, 0);
+  const end = new Date(start.getTime() + 30 * 60000);
+  const url = new URL("https://calendar.google.com/calendar/render");
+  url.searchParams.set("action", "TEMPLATE");
+  url.searchParams.set("text", `Grain demo call - ${latest.company}`);
+  url.searchParams.set("dates", `${formatCalendarDate(start)}/${formatCalendarDate(end)}`);
+  url.searchParams.set("details", [
+    `Contact: ${latest.firstName} ${latest.lastName}, ${latest.title || "Unknown title"}`,
+    `Company: ${latest.company}`,
+    `Source: ${conference?.name || "Conference"}`,
+    relationshipVerdict(group),
+    `Notes: ${latest.notes || "Add demo agenda and stakeholders."}`
+  ].join("\n"));
+  window.open(url.toString(), "_blank", "noopener,noreferrer");
+}
+
+function formatCalendarDate(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function openLinkedInSearch(group) {
+  const latest = group[group.length - 1];
+  const conference = state.conferences.find((c) => c.id === latest.conferenceId);
+  const note = [
+    `Hi ${latest.firstName}, good meeting you at ${conference?.name || "the conference"}.`,
+    `I enjoyed the conversation about ${latest.company}'s FX exposure and would be glad to stay connected.`
+  ].join(" ");
+  navigator.clipboard?.writeText(note);
+  const url = new URL("https://www.linkedin.com/search/results/people/");
+  url.searchParams.set("keywords", `${latest.firstName} ${latest.lastName} ${latest.company}`);
+  window.open(url.toString(), "_blank", "noopener,noreferrer");
+  alert("LinkedIn search opened. Connection note copied to clipboard.");
+}
+
+async function enrichLeadData(group, button) {
+  const latest = group[group.length - 1];
+  const target = button?.closest(".relationship")?.querySelector(".lead-enrichment");
+  if (!target) return;
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = "Enriching...";
+  target.innerHTML = "<strong>Company brief</strong><span>Building a short relationship brief...</span>";
+  try {
+    const summary = state.ai.key ? await enrichLeadWithAi(latest, group) : localCompanyBrief(latest, group);
+    target.innerHTML = `<strong>Company brief</strong><span>${escapeHtml(summary)}</span>`;
+  } catch (error) {
+    console.warn("Lead enrichment failed", error);
+    target.innerHTML = `<strong>Company brief</strong><span>${escapeHtml(localCompanyBrief(latest, group))}</span>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+}
+
+async function enrichLeadWithAi(lead, group) {
+  const domain = domainFromLead(lead);
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${state.ai.key}`
+    },
+    body: JSON.stringify({
+      model: state.ai.model || "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "You create concise B2B sales enrichment briefs for Grain, an FX risk fintech. Use only the provided lead data and generally known company/domain context; do not invent facts. Return 2 short sentences plus one suggested qualification question."
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ lead, domain, relationshipContext: buildRelationshipContext(group) })
+        }
+      ]
+    })
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const data = await response.json();
+  return data.choices[0].message.content.trim();
+}
+
+function localCompanyBrief(lead, group) {
+  const domain = domainFromLead(lead);
+  return `${lead.company}${domain ? ` (${domain})` : ""} appears in this relationship as a ${lead.vertical.toLowerCase()} account with ${group.length} conference touchpoints. Qualify current FX exposure, decision owner, and whether the next conversation should include finance or treasury leadership.`;
+}
+
+function domainFromLead(lead) {
+  return lead.email?.split("@")[1]?.toLowerCase() || "";
+}
+
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  })[char]);
 }
 
 function buildRelationshipContext(group) {
