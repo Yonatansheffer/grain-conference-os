@@ -553,7 +553,7 @@ function renderCalendar() {
     cells.push(`<div class="calendar-day">
       <strong>${day}</strong>
       <div class="calendar-events">
-        ${events.map((event) => `<button class="calendar-event tier-${tierFor(scoreConference(event)).toLowerCase()}" type="button" data-calendar-event="${event.id}">${event.name}</button>`).join("")}
+        ${events.map((event) => `<button class="calendar-event tier-${tierFor(scoreConference(event)).toLowerCase()}" type="button" title="${event.name}" data-calendar-event="${event.id}">${event.name}</button>`).join("")}
       </div>
     </div>`);
   }
@@ -589,8 +589,8 @@ function renderRelationships() {
   $("#relationshipList").innerHTML = groups.length
     ? groups.map(renderRelationship).join("")
     : "<div class='panel'><p class='muted'>No repeat contacts yet. Capture a lead and this view will update automatically.</p></div>";
-  $$("[data-draft]").forEach((button) => {
-    button.addEventListener("click", () => draftFollowUp(button.dataset.draft));
+  $$("[data-next-step]").forEach((button) => {
+    button.addEventListener("click", () => handleNextStep(button.dataset.nextStep, button.dataset.group));
   });
 }
 
@@ -607,9 +607,26 @@ function renderRelationship(group) {
     </div>
     <div class="actions">
       <span class="pill ${latest.sentiment === "Strong" ? "tier-a" : "tier-b"}">${latest.sentiment}</span>
-      <button class="ghost-button" data-draft="${encodedId}">Draft follow-up</button>
+      <div class="next-steps">
+        <span class="muted">Next steps</span>
+        ${relationshipNextSteps(group).map((step) => `<button class="ghost-button" type="button" data-next-step="${step.action}" data-group="${encodedId}">${step.label}</button>`).join("")}
+      </div>
     </div>
   </div>`;
+}
+
+function relationshipNextSteps(group) {
+  const verdict = relationshipVerdict(group);
+  const steps = [{ action: "gmail", label: "Draft Email Follow-up" }];
+  if (/Warming relationship/i.test(verdict)) {
+    steps.push({ action: "meeting", label: "Book buying meeting" });
+  } else if (/budget|owner/i.test(verdict)) {
+    steps.push({ action: "qualify", label: "Qualify budget owner" });
+  } else {
+    steps.push({ action: "nurture", label: "Add nurture task" });
+  }
+  steps.push({ action: "copy", label: "Copy context" });
+  return steps;
 }
 
 function renderScoringExplain() {
@@ -823,14 +840,33 @@ function createId() {
   return `lead-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function draftFollowUp(encodedIds) {
+function handleNextStep(action, encodedIds) {
+  const group = decodeLeadGroup(encodedIds);
+  if (action === "gmail") {
+    openGmailDraft(group);
+    return;
+  }
+  const context = buildRelationshipContext(group);
+  navigator.clipboard?.writeText(context);
+  const labels = {
+    meeting: "Buying meeting context copied.",
+    qualify: "Budget qualification context copied.",
+    nurture: "Nurture task context copied.",
+    copy: "Relationship context copied."
+  };
+  alert(labels[action] || "Context copied.");
+}
+
+function decodeLeadGroup(encodedIds) {
   const ids = decodeURIComponent(encodedIds).split(",");
-  const group = ids.map((id) => state.leads.find((lead) => lead.id === id)).filter(Boolean);
+  return ids.map((id) => state.leads.find((lead) => lead.id === id)).filter(Boolean);
+}
+
+function buildEmailDraft(group) {
   const latest = group[group.length - 1];
   const conference = state.conferences.find((c) => c.id === latest.conferenceId);
-  const draft = [
-    `Subject: Good seeing you after ${conference?.name || "the conference"}`,
-    "",
+  const subject = `Good seeing you after ${conference?.name || "the conference"}`;
+  const body = [
     `Hi ${latest.firstName},`,
     "",
     `Great speaking again. I was thinking about your ${latest.company} use case around ${latest.vertical.toLowerCase()} FX exposure, especially after hearing: "${latest.notes || "the context you shared"}".`,
@@ -839,8 +875,30 @@ function draftFollowUp(encodedIds) {
     "",
     "Best,"
   ].join("\n");
-  navigator.clipboard?.writeText(draft);
-  alert(`Follow-up draft copied:\n\n${draft}`);
+  return { to: latest.email || "", subject, body };
+}
+
+function openGmailDraft(group) {
+  const draft = buildEmailDraft(group);
+  const url = new URL("https://mail.google.com/mail/");
+  url.searchParams.set("view", "cm");
+  url.searchParams.set("fs", "1");
+  if (draft.to) url.searchParams.set("to", draft.to);
+  url.searchParams.set("su", draft.subject);
+  url.searchParams.set("body", draft.body);
+  window.open(url.toString(), "_blank", "noopener,noreferrer");
+}
+
+function buildRelationshipContext(group) {
+  const latest = group[group.length - 1];
+  const conferences = group.map((lead) => state.conferences.find((c) => c.id === lead.conferenceId)?.name || "Unknown");
+  return [
+    `${latest.firstName} ${latest.lastName} at ${latest.company}`,
+    relationshipVerdict(group),
+    `${group.length} encounters: ${conferences.join(" -> ")}`,
+    `Latest next step: ${latest.nextStep || "Not set"}`,
+    `Notes: ${group.map((lead) => lead.notes).filter(Boolean).join(" ")}`
+  ].join("\n");
 }
 
 function renderMatchPreview() {

@@ -771,14 +771,16 @@ tbody tr:hover {
 }
 
 .calendar-day {
-  min-height: 112px;
+  min-height: 116px;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 8px;
+  padding: 7px;
   background: #fffdf8;
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
+  overflow: hidden;
 }
 
 .calendar-day.empty {
@@ -793,18 +795,27 @@ tbody tr:hover {
 .calendar-events {
   display: grid;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .calendar-event {
+  box-sizing: border-box;
+  display: block;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 0;
   border-radius: 6px;
-  padding: 5px 6px;
+  padding: 4px 6px;
   color: var(--primary-dark);
   font-size: 11px;
   font-weight: 850;
   text-align: left;
   line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cluster-config {
@@ -995,7 +1006,19 @@ tbody tr:hover {
 .relationship .actions {
   display: grid;
   gap: 8px;
-  min-width: 180px;
+  min-width: 210px;
+}
+
+.next-steps {
+  display: grid;
+  gap: 7px;
+}
+
+.next-steps .ghost-button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  min-height: 36px;
 }
 
 .heat {
