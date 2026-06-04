@@ -183,11 +183,33 @@
                 <textarea id="notes" rows="5" placeholder="Use case, pain, buying signal, promised next step"></textarea>
               </label>
             </div>
-            <div class="capture-side">
-              <div>
-                <span class="eyebrow">Show-floor speed</span>
-                <h3>Tap the signal, skip the ceremony</h3>
+
+            <div class="floor-scribble panel">
+              <div class="scribble-head">
+                <div>
+                  <h3>Floor Scribble</h3>
+                  <p class="muted">Write or record any available information from your conversation.</p>
+                </div>
+                <button id="recordScribble" class="icon-button" type="button" aria-label="Record floor scribble">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8"/></svg>
+                </button>
               </div>
+              <textarea id="scribbleInput" rows="6" placeholder="Write or record conversation details..."></textarea>
+              <div class="scribble-actions">
+                <button id="parseScribble" class="primary-button" type="button">Smart-fill lead</button>
+                <span id="scribbleStatus" class="muted"></span>
+              </div>
+            </div>
+
+            <div class="capture-side ai-review-panel">
+              <div class="review-heading">
+                <div>
+                  <span class="eyebrow">AI Validation & Review</span>
+                  <h3>Confirm tags and next action</h3>
+                </div>
+                <span class="muted">AI suggestions stay editable before save.</span>
+              </div>
+              <div class="review-grid">
               <label>
                 Vertical
                 <select id="leadVertical">
@@ -223,28 +245,14 @@
                 Next step
                 <input id="nextStep" placeholder="Send deck, book call, qualify budget">
               </label>
-              <button class="primary-button wide" type="submit">Save lead</button>
-              <button id="exportCsv" class="ghost-button wide" type="button">Export HubSpot CSV</button>
+              </div>
+              <div class="capture-actions">
+                <button class="primary-button wide" type="submit">Save lead</button>
+                <button id="exportCsv" class="ghost-button wide" type="button">Export HubSpot CSV</button>
+              </div>
               <div id="matchPreview" class="match-preview"></div>
             </div>
           </form>
-
-          <div class="floor-scribble panel">
-            <div class="scribble-head">
-              <div>
-                <h3>Floor Scribble</h3>
-                <p class="muted">Write or record any available information from your conversation.</p>
-              </div>
-              <button id="recordScribble" class="icon-button" type="button" aria-label="Record floor scribble">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8"/></svg>
-              </button>
-            </div>
-            <textarea id="scribbleInput" rows="6" placeholder="Write or record conversation details..."></textarea>
-            <div class="scribble-actions">
-              <button id="parseScribble" class="primary-button" type="button">Smart-fill lead</button>
-              <span id="scribbleStatus" class="muted"></span>
-            </div>
-          </div>
         </section>
 
         <section id="relationships" class="view">
