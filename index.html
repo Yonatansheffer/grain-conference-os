@@ -68,6 +68,10 @@
               <button class="multi-filter-button" id="statusFilterButton" type="button" data-filter-button="status">All statuses</button>
               <div class="multi-filter-menu" id="statusFilter" data-filter="status"></div>
             </div>
+            <div class="toolbar-actions">
+              <button id="exportConferencesCsv" class="ghost-button" type="button">Export view CSV</button>
+              <button id="addConferenceButton" class="primary-button" type="button">Add Conference</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table>
@@ -86,7 +90,6 @@
               <tbody id="conferenceRows"></tbody>
             </table>
           </div>
-          <div id="selectedConference" class="detail-panel"></div>
         </section>
 
         <section id="planning" class="view">
@@ -292,6 +295,108 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div id="conferenceDetailModal" class="modal-overlay" aria-hidden="true">
+      <div class="modal-card detail-modal" role="dialog" aria-modal="true" aria-labelledby="conferenceDetailTitle">
+        <button class="modal-close" type="button" data-close-modal aria-label="Close details">x</button>
+        <div id="conferenceDetailBody"></div>
+      </div>
+    </div>
+
+    <div id="addConferenceModal" class="modal-overlay" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="addConferenceTitle">
+        <button class="modal-close" type="button" data-close-modal aria-label="Close add conference">x</button>
+        <div class="modal-head">
+          <span class="eyebrow">Conference database</span>
+          <h3 id="addConferenceTitle">Add Conference</h3>
+          <p class="muted">Create a new event row with enough context to score, filter, and plan coverage.</p>
+        </div>
+        <form id="addConferenceForm" class="conference-form">
+          <div class="two-col">
+            <label>
+              Conference name
+              <input id="newConferenceName" required>
+            </label>
+            <label>
+              Status
+              <select id="newConferenceStatus">
+                <option>Considering</option>
+                <option>Committed</option>
+                <option>Watchlist</option>
+              </select>
+            </label>
+          </div>
+          <div class="two-col">
+            <label>
+              Start date
+              <input id="newConferenceStart" type="date" required>
+            </label>
+            <label>
+              End date
+              <input id="newConferenceEnd" type="date" required>
+            </label>
+          </div>
+          <div class="three-col">
+            <label>
+              City
+              <input id="newConferenceCity" required>
+            </label>
+            <label>
+              Country
+              <input id="newConferenceCountry" required>
+            </label>
+            <label>
+              Region
+              <select id="newConferenceRegion">
+                <option>Europe</option>
+                <option>North America</option>
+                <option>APAC</option>
+                <option>Middle East</option>
+                <option>LATAM</option>
+              </select>
+            </label>
+          </div>
+          <div class="two-col">
+            <label>
+              Verticals
+              <input id="newConferenceVerticals" placeholder="Payments, Fintech, Travel" required>
+            </label>
+            <label>
+              Estimated audience
+              <input id="newConferenceAudience" type="number" min="100" step="100" value="2500" required>
+            </label>
+          </div>
+          <div class="two-col">
+            <label>
+              Team
+              <select id="newConferenceTeam" multiple size="4">
+                <option>Maya</option>
+                <option>Noah</option>
+                <option>Lior</option>
+                <option>Dana</option>
+                <option>Alex</option>
+              </select>
+            </label>
+            <label>
+              Source URL
+              <input id="newConferenceSource" type="url" placeholder="https://">
+            </label>
+          </div>
+          <div class="score-input-grid">
+            <label>Buyer density <input id="newBuyerDensity" type="number" min="1" max="5" value="4"></label>
+            <label>PSP fit <input id="newPspRelevance" type="number" min="1" max="5" value="4"></label>
+            <label>FX exposure <input id="newFxRelevance" type="number" min="1" max="5" value="4"></label>
+            <label>Travel fit <input id="newTravelRelevance" type="number" min="1" max="5" value="3"></label>
+            <label>Seniority <input id="newSeniority" type="number" min="1" max="5" value="4"></label>
+            <label>Cost tier <input id="newCostTier" type="number" min="1" max="5" value="3"></label>
+          </div>
+          <div class="modal-actions">
+            <button class="ghost-button" type="button" data-close-modal>Cancel</button>
+            <button class="primary-button" type="submit">Add to table</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <script src="data.js"></script>

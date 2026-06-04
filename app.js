@@ -22,6 +22,7 @@ const SCORE_WEIGHT_LABELS = {
   audienceReach: "Audience reach",
   costPenalty: "Travel cost penalty"
 };
+const CONFIRMED_STATUSES = ["Committed", "Approved", "Confirmed"];
 const PAGE_TITLES = {
   conferences: "Conferences",
   planning: "Planning",
@@ -402,7 +403,9 @@ function sortValue(c, key) {
 function renderMetrics(items) {
   const committed = items.filter((c) => c.status === "Committed");
   const tierA = items.filter((c) => tierFor(scoreConference(c)) === "A").length;
-  const audience = items.reduce((sum, c) => sum + c.audience, 0);
+  const audience = items
+    .filter((c) => CONFIRMED_STATUSES.includes(c.status))
+    .reduce((sum, c) => sum + c.audience, 0);
   $("#metrics").innerHTML = [
     ["Events", items.length],
     ["Tier A targets", tierA],
@@ -436,7 +439,7 @@ function renderConferenceRows() {
   $$("#conferenceRows tr").forEach((row) => {
     row.addEventListener("click", () => {
       selectedConferenceId = row.dataset.id;
-      renderSelectedConference();
+      openConferenceDetail(selectedConferenceId);
     });
   });
   $$(".table-select").forEach((select) => {
@@ -456,7 +459,6 @@ function renderConferenceRows() {
     });
   });
   if (!items.some((c) => c.id === selectedConferenceId)) selectedConferenceId = items[0]?.id;
-  renderSelectedConference();
 }
 
 function renderSortButtons() {
@@ -504,23 +506,34 @@ function teamLabel(c) {
   return Array.isArray(c.team) && c.team.length ? c.team.join(", ") : "Unassigned";
 }
 
+function openConferenceDetail(id) {
+  selectedConferenceId = id;
+  renderSelectedConference();
+  openModal("#conferenceDetailModal");
+}
+
 function renderSelectedConference() {
   const c = state.conferences.find((item) => item.id === selectedConferenceId);
   if (!c) {
-    $("#selectedConference").innerHTML = "<p>No conference selected.</p>";
+    $("#conferenceDetailBody").innerHTML = "<p>No conference selected.</p>";
     return;
   }
   const score = scoreConference(c);
   const nearby = state.conferences
     .filter((other) => other.id !== c.id && Math.abs(new Date(other.startDate) - new Date(c.startDate)) / 86400000 <= 30)
     .slice(0, 3);
-  $("#selectedConference").innerHTML = `<div class="detail-grid">
+  $("#conferenceDetailBody").innerHTML = `<div class="modal-head">
+    <span class="eyebrow">Selected event</span>
+    <h3 id="conferenceDetailTitle">${c.name}</h3>
+    <p class="muted">${formatDateRange(c)} in ${c.city}, ${c.country}. Estimated ${c.audience.toLocaleString()} attendees.</p>
+  </div>
+  <div class="detail-grid">
     <div>
-      <p class="eyebrow">Selected event</p>
-      <h3>${c.name}</h3>
-      <p>${formatDateRange(c)} in ${c.city}, ${c.country}. Estimated ${c.audience.toLocaleString()} attendees.</p>
+      <p class="eyebrow">Coverage</p>
+      <p><strong>Status:</strong> ${c.status}</p>
       <p><strong>Team:</strong> ${teamLabel(c)}</p>
-      <p><a href="${c.source}" target="_blank" rel="noreferrer">Source</a></p>
+      <p><strong>Region:</strong> ${c.region}</p>
+      <p>${c.source ? `<a href="${c.source}" target="_blank" rel="noreferrer">Source</a>` : "No source URL saved."}</p>
     </div>
     <div>
       <p class="eyebrow">Why it ranks ${score}</p>
@@ -599,8 +612,8 @@ function renderCalendar() {
   $$("[data-calendar-event]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedConferenceId = button.dataset.calendarEvent;
-      renderSelectedConference();
       document.querySelector("[data-view='conferences']").click();
+      openConferenceDetail(selectedConferenceId);
     });
   });
 }
@@ -789,7 +802,8 @@ function extractAfter(text, regex) {
 
 function titleCase(text) {
   return String(text || "").replace(/\w\S*/g, (word) => {
-    if (/^(VP|CFO|CEO|CTO|COO)$/i.test(word)) return word.toUpperCase();
+    if (/^(VP|CFO|CEO|CTO|COO|PSP|FX)$/i.test(word)) return word.toUpperCase();
+    if (/^saas$/i.test(word)) return "SaaS";
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });
 }
@@ -1132,6 +1146,132 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
+function exportConferencesCsv() {
+  const rows = [
+    ["Conference", "Date", "Location", "Region", "Verticals", "Audience", "ICP Score", "Tier", "Team", "Status", "Source"],
+    ...filteredConferences().map((conference) => {
+      const score = scoreConference(conference);
+      return [
+        conference.name,
+        formatDateRange(conference),
+        `${conference.city}, ${conference.country}`,
+        conference.region,
+        conference.verticals.join("; "),
+        conference.audience,
+        score,
+        tierFor(score),
+        teamLabel(conference),
+        conference.status,
+        conference.source || ""
+      ];
+    })
+  ];
+  downloadCsv(rows, "grain-conferences-current-view.csv");
+}
+
+function downloadCsv(rows, filename) {
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell || "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function setupConferenceActions() {
+  $("#exportConferencesCsv").addEventListener("click", exportConferencesCsv);
+  $("#addConferenceButton").addEventListener("click", () => {
+    $("#addConferenceForm").reset();
+    $("#newConferenceAudience").value = "2500";
+    $("#newBuyerDensity").value = "4";
+    $("#newPspRelevance").value = "4";
+    $("#newFxRelevance").value = "4";
+    $("#newTravelRelevance").value = "3";
+    $("#newSeniority").value = "4";
+    $("#newCostTier").value = "3";
+    openModal("#addConferenceModal");
+  });
+  $("#addConferenceForm").addEventListener("submit", addConferenceFromForm);
+  $$("[data-close-modal]").forEach((button) => {
+    button.addEventListener("click", () => closeModals());
+  });
+  $$(".modal-overlay").forEach((overlay) => {
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModals();
+    });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeModals();
+  });
+}
+
+function addConferenceFromForm(event) {
+  event.preventDefault();
+  const startDate = $("#newConferenceStart").value;
+  const endDate = $("#newConferenceEnd").value || startDate;
+  const conference = {
+    id: createConferenceId($("#newConferenceName").value),
+    name: $("#newConferenceName").value.trim(),
+    startDate,
+    endDate: new Date(endDate) < new Date(startDate) ? startDate : endDate,
+    city: $("#newConferenceCity").value.trim(),
+    country: $("#newConferenceCountry").value.trim(),
+    region: $("#newConferenceRegion").value,
+    verticals: $("#newConferenceVerticals").value.split(",").map((item) => titleCase(item.trim())).filter(Boolean),
+    audience: Math.max(100, Number($("#newConferenceAudience").value) || 100),
+    seniority: boundedScore("#newSeniority"),
+    buyerDensity: boundedScore("#newBuyerDensity"),
+    fxRelevance: boundedScore("#newFxRelevance"),
+    travelRelevance: boundedScore("#newTravelRelevance"),
+    pspRelevance: boundedScore("#newPspRelevance"),
+    costTier: boundedScore("#newCostTier"),
+    status: $("#newConferenceStatus").value,
+    source: $("#newConferenceSource").value.trim(),
+    team: Array.from($("#newConferenceTeam").selectedOptions).map((option) => option.value)
+  };
+  state.conferences.push(conference);
+  selectedConferenceId = conference.id;
+  saveState();
+  filterState = { vertical: [], region: [], status: [] };
+  closeModals();
+  renderFilters();
+  renderAll();
+  openConferenceDetail(conference.id);
+}
+
+function boundedScore(selector) {
+  return Math.max(1, Math.min(5, Number($(selector).value) || 3));
+}
+
+function createConferenceId(name) {
+  const base = normalize(name).slice(0, 28) || "conference";
+  let id = `${base}-${new Date().getFullYear()}`;
+  let index = 2;
+  while (state.conferences.some((conference) => conference.id === id)) {
+    id = `${base}-${new Date().getFullYear()}-${index}`;
+    index += 1;
+  }
+  return id;
+}
+
+function openModal(selector) {
+  const modal = $(selector);
+  if (!modal) return;
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeModals() {
+  $$(".modal-overlay").forEach((modal) => {
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+  });
+  document.body.classList.remove("modal-open");
+}
+
 async function pushHubspot() {
   state.hubspot.token = $("#hubspotToken").value.trim();
   saveState();
@@ -1246,6 +1386,7 @@ function setup() {
   setupFilterControls();
   setupSorting();
   setupPlanningControls();
+  setupConferenceActions();
   setupCapture();
   setupSettings();
   $("#searchInput").addEventListener("input", renderConferenceRows);
