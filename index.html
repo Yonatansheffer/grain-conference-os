@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Grain Conference OS</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">G</div>
+          <div>
+            <h1>Conference OS</h1>
+            <p>Pipeline planning for Grain</p>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Primary">
+          <button class="nav-item active" data-view="conferences">Conferences</button>
+          <button class="nav-item" data-view="planning">Planning</button>
+          <button class="nav-item" data-view="capture">Capture</button>
+          <button class="nav-item" data-view="relationships">Relationships</button>
+          <button class="nav-item" data-view="settings">Settings</button>
+        </nav>
+        <div class="sidebar-note">
+          <span class="eyebrow">ICP Lens</span>
+          <p>PSPs, cross-border payments, travel wholesalers, fintech treasury, and high-volume SaaS with FX exposure.</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="topbar">
+          <div>
+            <p class="eyebrow">Grain Fintech</p>
+            <h2 id="viewTitle">Conferences</h2>
+          </div>
+          <div class="top-actions">
+            <button id="seedReset" class="ghost-button">Reset demo data</button>
+            <button id="exportCsv" class="primary-button">Export HubSpot CSV</button>
+          </div>
+        </section>
+
+        <section id="conferences" class="view active">
+          <div class="metric-grid" id="metrics"></div>
+          <div class="toolbar">
+            <label>
+              Search
+              <input id="searchInput" type="search" placeholder="Money20/20, PSP, London">
+            </label>
+            <label>
+              Vertical
+              <select id="verticalFilter"></select>
+            </label>
+            <label>
+              Region
+              <select id="regionFilter"></select>
+            </label>
+            <label>
+              Status
+              <select id="statusFilter"></select>
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Conference</th>
+                  <th>Date</th>
+                  <th>Location</th>
+                  <th>Verticals</th>
+                  <th>Audience</th>
+                  <th>ICP Score</th>
+                  <th>Tier</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="conferenceRows"></tbody>
+            </table>
+          </div>
+          <div id="selectedConference" class="detail-panel"></div>
+        </section>
+
+        <section id="planning" class="view">
+          <div class="planning-grid">
+            <div class="panel">
+              <div class="panel-head">
+                <h3>Year Coverage</h3>
+                <span id="coverageSummary"></span>
+              </div>
+              <div id="timeline" class="timeline"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <h3>Trip Clusters</h3>
+                <span>30-day window</span>
+              </div>
+              <div id="clusters" class="cluster-list"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Under-Invested Segments</h3>
+              <span>Based on committed coverage vs. ICP value</span>
+            </div>
+            <div id="gaps" class="gap-grid"></div>
+          </div>
+        </section>
+
+        <section id="capture" class="view">
+          <form id="leadForm" class="capture-layout">
+            <div class="capture-main">
+              <label>
+                Conference
+                <select id="leadConference" required></select>
+              </label>
+              <div class="two-col">
+                <label>
+                  First name
+                  <input id="firstName" autocomplete="given-name" required>
+                </label>
+                <label>
+                  Last name
+                  <input id="lastName" autocomplete="family-name" required>
+                </label>
+              </div>
+              <div class="two-col">
+                <label>
+                  Company
+                  <input id="company" autocomplete="organization" required>
+                </label>
+                <label>
+                  Title
+                  <input id="title" autocomplete="organization-title">
+                </label>
+              </div>
+              <div class="two-col">
+                <label>
+                  Email
+                  <input id="email" type="email" autocomplete="email">
+                </label>
+                <label>
+                  Phone
+                  <input id="phone" type="tel" autocomplete="tel">
+                </label>
+              </div>
+              <label>
+                Quick notes
+                <textarea id="notes" rows="5" placeholder="Use case, pain, buying signal, promised next step"></textarea>
+              </label>
+            </div>
+            <div class="capture-side">
+              <div>
+                <span class="eyebrow">Show-floor speed</span>
+                <h3>Tap the signal, skip the ceremony</h3>
+              </div>
+              <label>
+                Vertical
+                <select id="leadVertical">
+                  <option>Payments</option>
+                  <option>Travel</option>
+                  <option>Fintech</option>
+                  <option>SaaS</option>
+                  <option>Banking</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label>
+                Urgency
+                <select id="urgency">
+                  <option>Immediate</option>
+                  <option>This quarter</option>
+                  <option>Exploring</option>
+                  <option>Not a fit</option>
+                </select>
+              </label>
+              <label>
+                Sentiment
+                <div class="segmented" role="group" aria-label="Lead sentiment">
+                  <input id="sentStrong" name="sentiment" type="radio" value="Strong" checked>
+                  <label for="sentStrong">Strong</label>
+                  <input id="sentMedium" name="sentiment" type="radio" value="Medium">
+                  <label for="sentMedium">Medium</label>
+                  <input id="sentWeak" name="sentiment" type="radio" value="Weak">
+                  <label for="sentWeak">Weak</label>
+                </div>
+              </label>
+              <label>
+                Next step
+                <input id="nextStep" placeholder="Send deck, book call, qualify budget">
+              </label>
+              <button class="primary-button wide" type="submit">Save lead</button>
+              <div id="matchPreview" class="match-preview"></div>
+            </div>
+          </form>
+        </section>
+
+        <section id="relationships" class="view">
+          <div class="relationship-top">
+            <div>
+              <p class="eyebrow">Cross-Conference Intelligence</p>
+              <h3>Repeat contacts and relationship arcs</h3>
+            </div>
+            <button id="aiSummaries" class="primary-button">Generate AI summaries</button>
+          </div>
+          <div id="relationshipList" class="relationship-list"></div>
+        </section>
+
+        <section id="settings" class="view">
+          <div class="settings-grid">
+            <div class="panel">
+              <h3>AI Assistant</h3>
+              <p class="muted">Optional. Without a key, the app uses transparent local heuristics. With a key, it drafts relationship summaries and follow-ups from lead notes.</p>
+              <label>
+                OpenAI-compatible API key
+                <input id="aiKey" type="password" placeholder="Stored only in this browser">
+              </label>
+              <label>
+                Model
+                <input id="aiModel" value="gpt-4o-mini">
+              </label>
+              <button id="saveAi" class="primary-button">Save AI settings</button>
+            </div>
+            <div class="panel">
+              <h3>HubSpot Path</h3>
+              <p class="muted">For a static demo, CSV export is the safest path. Optional direct push uses a user-provided private app token in this browser.</p>
+              <label>
+                HubSpot private app token
+                <input id="hubspotToken" type="password" placeholder="Not hardcoded">
+              </label>
+              <button id="pushHubspot" class="primary-button">Push new leads to HubSpot</button>
+              <div id="hubspotResult" class="muted"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Scoring Methodology</h3>
+            <p class="muted">ICP Score = buyer density, PSP/payment fit, FX exposure, travel-wholesaler relevance, seniority, and audience reach, minus travel cost. Tier A means prioritize sponsorship or senior coverage; Tier B means send a focused rep; Tier C means monitor or piggyback only.</p>
+            <div id="scoringExplain" class="score-explain"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
