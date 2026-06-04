@@ -29,8 +29,7 @@
           <button class="nav-item" data-view="settings" title="Settings"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5ZM19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2-1.1L14 3h-4l-.5 2.8a7 7 0 0 0-2 1.1l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2 1.1L10 21h4l.5-2.8a7 7 0 0 0 2-1.1l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/></svg></span><span class="nav-label">Settings</span></button>
         </nav>
         <div class="sidebar-note">
-          <span class="eyebrow">ICP Lens</span>
-          <p>PSPs, cross-border payments, travel wholesalers, fintech treasury, and high-volume SaaS with FX exposure.</p>
+          <p>Home assignment for AI Builder position at Grain - Yonatan Sheffer</p>
         </div>
         <div class="sidebar-resizer" id="sidebarResizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical"></div>
       </aside>
@@ -139,29 +138,11 @@
         </section>
 
         <section id="capture" class="view">
-          <div class="floor-scribble panel">
-            <div class="scribble-head">
-              <div>
-                <h3>Floor Scribble</h3>
-                <p class="muted">Write or record any available information from your conversation.</p>
-              </div>
-              <button id="recordScribble" class="icon-button" type="button" aria-label="Record floor scribble">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8"/></svg>
-              </button>
-            </div>
-            <textarea id="scribbleInput" rows="6" placeholder="Write or record conversation details..."></textarea>
-            <div class="scribble-actions">
-              <button id="parseScribble" class="primary-button" type="button">Smart-fill lead</button>
-              <button id="showReviewForm" class="ghost-button" type="button">Fill manually</button>
-              <span id="scribbleStatus" class="muted"></span>
-            </div>
-          </div>
-
-          <form id="leadForm" class="capture-layout review-hidden">
+          <form id="leadForm" class="capture-layout">
             <div class="capture-main">
               <div class="review-heading">
-                <h3>Review lead</h3>
-                <span class="muted">Verify, correct, then save.</span>
+                <h3>Manual lead entry</h3>
+                <span class="muted">Fill directly or use Floor Scribble to smart-fill.</span>
               </div>
               <label>
                 Conference
@@ -246,6 +227,23 @@
               <div id="matchPreview" class="match-preview"></div>
             </div>
           </form>
+
+          <div class="floor-scribble panel">
+            <div class="scribble-head">
+              <div>
+                <h3>Floor Scribble</h3>
+                <p class="muted">Write or record any available information from your conversation.</p>
+              </div>
+              <button id="recordScribble" class="icon-button" type="button" aria-label="Record floor scribble">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8"/></svg>
+              </button>
+            </div>
+            <textarea id="scribbleInput" rows="6" placeholder="Write or record conversation details..."></textarea>
+            <div class="scribble-actions">
+              <button id="parseScribble" class="primary-button" type="button">Smart-fill lead</button>
+              <span id="scribbleStatus" class="muted"></span>
+            </div>
+          </div>
         </section>
 
         <section id="relationships" class="view">
@@ -288,6 +286,8 @@
           <div class="panel">
             <h3>Scoring Methodology</h3>
             <p class="muted">ICP Score = buyer density, PSP/payment fit, FX exposure, travel-wholesaler relevance, seniority, and audience reach, minus travel cost. Tier A means prioritize sponsorship or senior coverage; Tier B means send a focused rep; Tier C means monitor or piggyback only.</p>
+            <div id="weightControls" class="weight-controls"></div>
+            <button id="saveWeights" class="primary-button">Save scoring weights</button>
             <div id="scoringExplain" class="score-explain"></div>
           </div>
         </section>

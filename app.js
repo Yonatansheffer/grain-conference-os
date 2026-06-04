@@ -4,6 +4,24 @@ const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 380;
 const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist"];
 const TEAM_OPTIONS = ["Maya", "Noah", "Lior", "Dana", "Alex"];
+const DEFAULT_SCORE_WEIGHTS = {
+  buyerDensity: 20,
+  pspRelevance: 18,
+  fxRelevance: 20,
+  travelRelevance: 12,
+  seniority: 14,
+  audienceReach: 10,
+  costPenalty: 8
+};
+const SCORE_WEIGHT_LABELS = {
+  buyerDensity: "Buyer density",
+  pspRelevance: "PSP/payment fit",
+  fxRelevance: "FX exposure",
+  travelRelevance: "Travel relevance",
+  seniority: "Decision-maker seniority",
+  audienceReach: "Audience reach",
+  costPenalty: "Travel cost penalty"
+};
 const PAGE_TITLES = {
   conferences: "Conferences",
   planning: "Planning",
@@ -16,7 +34,7 @@ const PAGE_DESCRIPTIONS = {
   planning: "Track the event calendar, spot coverage gaps, and tune trip-cluster rules.",
   capture: "Log high-signal conversations quickly while reps are on the conference floor.",
   relationships: "Review repeat contacts, relationship arcs, and recommended next steps.",
-  settings: "Configure optional AI assistance and HubSpot export or sync settings."
+  settings: "Configure ICP scoring weights, optional AI assistance, and HubSpot export or sync settings."
 };
 
 const state = migrateState(loadState());
@@ -38,11 +56,15 @@ function loadState() {
     conferences: clone(CONFERENCES),
     leads: clone(LEADS),
     ai: { key: "", model: "gpt-4o-mini" },
-    hubspot: { token: "" }
+    hubspot: { token: "" },
+    scoringWeights: clone(DEFAULT_SCORE_WEIGHTS)
   };
 }
 
 function migrateState(loaded) {
+  loaded.ai = loaded.ai || { key: "", model: "gpt-4o-mini" };
+  loaded.hubspot = loaded.hubspot || { token: "" };
+  loaded.scoringWeights = { ...DEFAULT_SCORE_WEIGHTS, ...(loaded.scoringWeights || {}) };
   loaded.conferences = loaded.conferences.map((conference) => {
     if (Array.isArray(conference.team)) return conference;
     const team = conference.owner && conference.owner !== "Unassigned" ? [conference.owner] : [];
@@ -70,15 +92,16 @@ function formatDateRange(item) {
 }
 
 function scoreConference(c) {
+  const weights = { ...DEFAULT_SCORE_WEIGHTS, ...(state.scoringWeights || {}) };
   const reach = Math.min(5, Math.log10(Math.max(c.audience, 100)) - 1);
   const raw =
-    (c.buyerDensity / 5) * 20 +
-    (c.pspRelevance / 5) * 18 +
-    (c.fxRelevance / 5) * 20 +
-    (c.travelRelevance / 5) * 12 +
-    (c.seniority / 5) * 14 +
-    (reach / 5) * 10 -
-    (c.costTier / 5) * 8 +
+    (c.buyerDensity / 5) * weights.buyerDensity +
+    (c.pspRelevance / 5) * weights.pspRelevance +
+    (c.fxRelevance / 5) * weights.fxRelevance +
+    (c.travelRelevance / 5) * weights.travelRelevance +
+    (c.seniority / 5) * weights.seniority +
+    (reach / 5) * weights.audienceReach -
+    (c.costTier / 5) * weights.costPenalty +
     6;
   return Math.max(0, Math.min(100, Math.round(raw)));
 }
@@ -156,12 +179,14 @@ function relationshipVerdict(group) {
 function renderNav() {
   $$(".nav-item").forEach((button) => {
     button.addEventListener("click", () => {
+      const previousView = $(".nav-item.active")?.dataset.view;
       $$(".nav-item").forEach((b) => b.classList.remove("active"));
       $$(".view").forEach((v) => v.classList.remove("active"));
       button.classList.add("active");
       $(`#${button.dataset.view}`).classList.add("active");
       $("#pageTitle").textContent = PAGE_TITLES[button.dataset.view] || "Grain Conference Tool";
       $("#pageDescription").textContent = PAGE_DESCRIPTIONS[button.dataset.view] || "";
+      if (previousView !== button.dataset.view) collapseSidebar();
       renderAll();
     });
   });
@@ -216,6 +241,16 @@ function setupSidebar() {
 
 function savedSidebar() {
   return JSON.parse(localStorage.getItem(SIDEBAR_KEY) || "{}");
+}
+
+function collapseSidebar() {
+  const shell = $("#appShell");
+  const toggle = $("#sidebarToggle");
+  if (!shell || shell.classList.contains("sidebar-collapsed")) return;
+  shell.classList.add("sidebar-collapsed");
+  toggle?.setAttribute("aria-expanded", "false");
+  toggle?.setAttribute("aria-label", "Expand sidebar");
+  localStorage.setItem(SIDEBAR_KEY, JSON.stringify({ ...savedSidebar(), collapsed: true }));
 }
 
 function renderFilters() {
@@ -641,7 +676,6 @@ function setupCapture() {
     $(`#${id}`).addEventListener("input", renderMatchPreview);
   });
   $("#parseScribble").addEventListener("click", parseFloorScribble);
-  $("#showReviewForm").addEventListener("click", () => revealLeadForm());
   $("#recordScribble").addEventListener("click", toggleScribbleRecording);
   $("#leadForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -666,7 +700,6 @@ function setupCapture() {
     $("#leadForm").reset();
     $("#scribbleInput").value = "";
     $("#scribbleStatus").textContent = "";
-    hideLeadForm();
     $("#sentStrong").checked = true;
     renderAll();
     alert("Lead saved. Relationship tracking updated.");
@@ -796,11 +829,11 @@ function findConferenceFromText(text) {
 }
 
 function revealLeadForm() {
-  $("#leadForm").classList.remove("review-hidden");
+  $("#leadForm")?.classList.remove("review-hidden");
 }
 
 function hideLeadForm() {
-  $("#leadForm").classList.add("review-hidden");
+  $("#leadForm")?.classList.remove("review-hidden");
 }
 
 function toggleScribbleRecording() {
@@ -1013,6 +1046,7 @@ function setupSettings() {
   $("#aiKey").value = state.ai.key || "";
   $("#aiModel").value = state.ai.model || "gpt-4o-mini";
   $("#hubspotToken").value = state.hubspot.token || "";
+  renderWeightControls();
   $("#saveAi").addEventListener("click", () => {
     state.ai.key = $("#aiKey").value.trim();
     state.ai.model = $("#aiModel").value.trim();
@@ -1020,14 +1054,57 @@ function setupSettings() {
     saveState();
     alert("Settings saved in this browser.");
   });
+  $("#saveWeights").addEventListener("click", saveScoringWeights);
   $("#pushHubspot").addEventListener("click", pushHubspot);
   $("#aiSummaries").addEventListener("click", generateAiSummaries);
+}
+
+function renderWeightControls() {
+  const weights = { ...DEFAULT_SCORE_WEIGHTS, ...(state.scoringWeights || {}) };
+  $("#weightControls").innerHTML = Object.entries(SCORE_WEIGHT_LABELS)
+    .map(([key, label]) => `<label class="weight-control">
+      <span>${label}</span>
+      <input type="range" min="0" max="30" step="1" value="${weights[key]}" data-score-weight="${key}" aria-label="${label} weight">
+      <input type="number" min="0" max="30" step="1" value="${weights[key]}" data-score-weight-number="${key}" aria-label="${label} percentage">
+      <strong>${weights[key]}%</strong>
+    </label>`)
+    .join("");
+  $$("[data-score-weight]").forEach((range) => {
+    range.addEventListener("input", () => syncWeightInput(range.dataset.scoreWeight, range.value));
+  });
+  $$("[data-score-weight-number]").forEach((input) => {
+    input.addEventListener("input", () => syncWeightInput(input.dataset.scoreWeightNumber, input.value));
+  });
+}
+
+function syncWeightInput(key, value) {
+  const cleanValue = Math.max(0, Math.min(30, Math.round(Number(value) || 0)));
+  const range = $(`[data-score-weight="${key}"]`);
+  const number = $(`[data-score-weight-number="${key}"]`);
+  const label = number?.nextElementSibling;
+  if (range) range.value = cleanValue;
+  if (number) number.value = cleanValue;
+  if (label) label.textContent = `${cleanValue}%`;
+}
+
+function saveScoringWeights() {
+  state.scoringWeights = Object.fromEntries(
+    Object.keys(DEFAULT_SCORE_WEIGHTS).map((key) => {
+      const input = $(`[data-score-weight-number="${key}"]`);
+      return [key, Math.max(0, Math.min(30, Math.round(Number(input?.value) || 0)))];
+    })
+  );
+  saveState();
+  sortState = { key: "score", direction: "desc" };
+  renderAll();
+  alert("Scoring weights saved. ICP rankings refreshed.");
 }
 
 function renderAll() {
   renderConferenceRows();
   renderPlanning();
   renderRelationships();
+  renderWeightControls();
   renderScoringExplain();
   renderMatchPreview();
 }

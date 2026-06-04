@@ -5,7 +5,7 @@
   --ink: #10263a;
   --muted: #64788a;
   --line: #e7ddcc;
-  --paper: #fbf4e6;
+  --paper: #fdfbf7;
   --panel: #ffffff;
   --brand: #9ee8ff;
   --brand-2: #dff7ff;
@@ -204,9 +204,11 @@ button {
 }
 
 .sidebar-note p {
-  color: #38586b;
-  line-height: 1.5;
-  margin-bottom: 0;
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+  margin: 0;
 }
 
 .sidebar-resizer {
@@ -294,6 +296,7 @@ button {
 .main {
   padding: 24px;
   min-width: 0;
+  background: var(--paper);
 }
 
 .topbar {
@@ -865,6 +868,37 @@ tbody tr:hover {
   gap: 12px;
 }
 
+.weight-controls {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 14px;
+}
+
+.weight-control {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(140px, 2fr) 72px 46px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.weight-control span {
+  font-weight: 800;
+}
+
+.weight-control input[type="number"] {
+  min-height: 36px;
+  padding: 6px 8px;
+}
+
+.weight-control strong {
+  color: var(--primary-dark);
+  text-align: right;
+}
+
 .cluster,
 .relationship,
 .gap {
@@ -885,6 +919,11 @@ tbody tr:hover {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .floor-scribble {
@@ -1080,8 +1119,13 @@ tbody tr:hover {
   .planning-grid,
   .settings-grid,
   .detail-grid,
-  .capture-layout {
+  .capture-layout,
+  .weight-control {
     grid-template-columns: 1fr;
+  }
+
+  .weight-control strong {
+    text-align: left;
   }
 }
 
