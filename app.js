@@ -41,6 +41,7 @@ const PAGE_DESCRIPTIONS = {
 const state = migrateState(loadState());
 let selectedConferenceId = state.conferences[0]?.id;
 let filterState = { vertical: [], region: [], status: [] };
+let opportunityFilter = null;
 let sortState = { key: "score", direction: "desc" };
 let calendarDate = new Date("2026-06-01T00:00:00");
 let clusterConfig = { regions: [], windowDays: 30 };
@@ -301,12 +302,14 @@ function renderMultiFilter(key, options, pluralLabel) {
   ].join("");
   menu.querySelectorAll("input").forEach((input) => {
     input.addEventListener("change", () => {
+      opportunityFilter = null;
       filterState[key] = Array.from(menu.querySelectorAll("input:checked")).map((item) => item.value);
       renderFilters();
       renderConferenceRows();
     });
   });
   menu.querySelector("[data-filter-clear]")?.addEventListener("click", () => {
+    opportunityFilter = null;
     filterState[key] = [];
     renderFilters();
     renderConferenceRows();
@@ -375,6 +378,11 @@ function filteredConferences() {
     .filter((c) => !filterState.vertical.length || c.verticals.some((vertical) => filterState.vertical.includes(vertical)))
     .filter((c) => !filterState.region.length || filterState.region.includes(c.region))
     .filter((c) => !filterState.status.length || filterState.status.includes(c.status))
+    .filter((c) => !opportunityFilter || (
+      c.verticals.includes(opportunityFilter.vertical) &&
+      opportunityFilter.statuses.includes(c.status) &&
+      scoreConference(c) >= opportunityFilter.minScore
+    ))
     .sort(compareConferences);
 }
 
@@ -566,20 +574,59 @@ function renderPlanning() {
 
     const verticals = ["Payments", "Travel", "Fintech", "SaaS"];
     $("#gaps").innerHTML = verticals
-      .map((v) => {
-        const relevant = state.conferences.filter((c) => c.verticals.includes(v));
-        const committed = relevant.filter((c) => c.status === "Committed");
-        const avg = relevant.length ? Math.round(relevant.reduce((sum, c) => sum + scoreConference(c), 0) / relevant.length) : 0;
-        const gap = avg >= 68 && committed.length < 2;
-        return `<div class="gap"><strong>${v}</strong><p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}.</p><p class="${gap ? "heat" : "muted"}">${gap ? "Under-invested: add coverage or piggyback." : "Coverage looks proportional."}</p></div>`;
-      })
+      .map(renderGapCard)
       .join("");
+    $$("[data-gap-opportunities]").forEach((button) => {
+      button.addEventListener("click", () => viewSegmentOpportunities(button.dataset.gapOpportunities));
+    });
   } catch (error) {
     console.error("Planning render failed", error);
     $("#eventCalendar").innerHTML = `<div class="empty-state"><strong>Planning could not load.</strong><span>Reset demo data or refresh the page to rebuild the event calendar.</span></div>`;
     $("#clusters").innerHTML = "";
     $("#gaps").innerHTML = "";
   }
+}
+
+function renderGapCard(vertical) {
+  const relevant = state.conferences.filter((c) => c.verticals.includes(vertical));
+  const committed = relevant.filter((c) => c.status === "Committed");
+  const avg = relevant.length ? Math.round(relevant.reduce((sum, c) => sum + scoreConference(c), 0) / relevant.length) : 0;
+  const ratio = relevant.length ? committed.length / relevant.length : 0;
+  const progress = Math.round(ratio * 100);
+  const gap = avg >= 68 && committed.length < 2;
+  const pending = relevant
+    .filter((c) => c.status !== "Committed" && scoreConference(c) >= 68)
+    .sort((a, b) => scoreConference(b) - scoreConference(a));
+  const missedReach = pending.reduce((sum, c) => sum + c.audience, 0);
+  const tone = gap ? (progress === 0 ? "danger" : "warning") : "healthy";
+  return `<div class="gap gap-${tone}">
+    <div class="gap-head">
+      <strong>${vertical}</strong>
+      <span>${progress}% covered</span>
+    </div>
+    <div class="gap-progress" aria-label="${vertical} committed coverage">
+      <span style="width:${Math.min(100, progress)}%"></span>
+    </div>
+    <p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}.</p>
+    <p class="${gap ? "heat" : "muted"}">${gap ? "Under-invested: add coverage or piggyback." : "Coverage looks proportional."}</p>
+    ${gap ? `<p class="muted gap-cost">Missing out on ${missedReach.toLocaleString()} potential reach across ${pending.length} pending events.</p>
+      <button class="gap-action" type="button" data-gap-opportunities="${vertical}">View Opportunities</button>` : ""}
+  </div>`;
+}
+
+function viewSegmentOpportunities(vertical) {
+  filterState = {
+    vertical: [vertical],
+    region: [],
+    status: ["Considering", "Watchlist"]
+  };
+  opportunityFilter = { vertical, statuses: ["Considering", "Watchlist"], minScore: 68 };
+  sortState = { key: "score", direction: "desc" };
+  renderFilters();
+  document.querySelector("[data-view='conferences']").click();
+  $("#searchInput").value = "";
+  renderConferenceRows();
+  document.querySelector("#conferences")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderCalendar() {
@@ -1235,6 +1282,7 @@ function addConferenceFromForm(event) {
   selectedConferenceId = conference.id;
   saveState();
   filterState = { vertical: [], region: [], status: [] };
+  opportunityFilter = null;
   closeModals();
   renderFilters();
   renderAll();
@@ -1389,7 +1437,10 @@ function setup() {
   setupConferenceActions();
   setupCapture();
   setupSettings();
-  $("#searchInput").addEventListener("input", renderConferenceRows);
+  $("#searchInput").addEventListener("input", () => {
+    opportunityFilter = null;
+    renderConferenceRows();
+  });
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#seedReset").addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
