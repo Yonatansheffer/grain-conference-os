@@ -30,6 +30,7 @@
         </nav>
         <div class="sidebar-note">
           <p>Home assignment for AI Builder position at Grain - Yonatan Sheffer</p>
+          <button id="seedReset" class="sidebar-reset" type="button">Reset demo data</button>
         </div>
         <div class="sidebar-resizer" id="sidebarResizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical"></div>
       </aside>
@@ -39,10 +40,6 @@
           <div>
             <h2 id="pageTitle">Conferences</h2>
             <p class="view-label" id="pageDescription">Prioritize events by ICP fit, coverage needs, and expected pipeline value.</p>
-          </div>
-          <div class="top-actions">
-            <button id="seedReset" class="ghost-button">Reset demo data</button>
-            <button id="exportCsv" class="primary-button">Export HubSpot CSV</button>
           </div>
         </section>
 
@@ -68,10 +65,6 @@
               <button class="multi-filter-button" id="statusFilterButton" type="button" data-filter-button="status">All statuses</button>
               <div class="multi-filter-menu" id="statusFilter" data-filter="status"></div>
             </div>
-            <div class="toolbar-actions">
-              <button id="exportConferencesCsv" class="ghost-button" type="button">Export view CSV</button>
-              <button id="addConferenceButton" class="primary-button" type="button">Add Conference</button>
-            </div>
           </div>
           <div class="table-wrap">
             <table>
@@ -89,6 +82,10 @@
               </thead>
               <tbody id="conferenceRows"></tbody>
             </table>
+          </div>
+          <div class="table-actions">
+            <button id="exportConferencesCsv" class="primary-button" type="button">Export view CSV</button>
+            <button id="addConferenceButton" class="primary-button" type="button">Add Conference</button>
           </div>
         </section>
 
@@ -227,6 +224,7 @@
                 <input id="nextStep" placeholder="Send deck, book call, qualify budget">
               </label>
               <button class="primary-button wide" type="submit">Save lead</button>
+              <button id="exportCsv" class="ghost-button wide" type="button">Export HubSpot CSV</button>
               <div id="matchPreview" class="match-preview"></div>
             </div>
           </form>
@@ -288,10 +286,8 @@
           </div>
           <div class="panel">
             <h3>Scoring Methodology</h3>
-            <p class="muted">ICP Score = buyer density, PSP/payment fit, FX exposure, travel-wholesaler relevance, seniority, and audience reach, minus travel cost. Tier A means prioritize sponsorship or senior coverage; Tier B means send a focused rep; Tier C means monitor or piggyback only.</p>
             <div id="weightControls" class="weight-controls"></div>
             <button id="saveWeights" class="primary-button">Save scoring weights</button>
-            <div id="scoringExplain" class="score-explain"></div>
           </div>
         </section>
       </main>
@@ -369,7 +365,7 @@
           </div>
           <div class="two-col">
             <label>
-              Team
+              Team members
               <select id="newConferenceTeam" multiple size="4">
                 <option>Maya</option>
                 <option>Noah</option>
@@ -377,6 +373,7 @@
                 <option>Dana</option>
                 <option>Alex</option>
               </select>
+              <span class="field-hint">Hold Ctrl or Cmd to select multiple reps.</span>
             </label>
             <label>
               Source URL

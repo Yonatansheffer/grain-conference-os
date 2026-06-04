@@ -735,6 +735,7 @@ function relationshipNextSteps(group) {
 }
 
 function renderScoringExplain() {
+  if (!$("#scoringExplain")) return;
   const top = [...state.conferences].sort((a, b) => scoreConference(b) - scoreConference(a)).slice(0, 4);
   $("#scoringExplain").innerHTML = top
     .map((c) => `<div class="cluster"><strong>${c.name}: ${scoreConference(c)} / Tier ${tierFor(scoreConference(c))}</strong><span>${scoreNarrative(c)}</span></div>`)

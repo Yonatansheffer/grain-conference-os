@@ -209,6 +209,8 @@ button {
   margin-top: auto;
   border-top: 1px solid rgba(9, 118, 168, 0.18);
   padding-top: 20px;
+  display: grid;
+  gap: 12px;
 }
 
 .sidebar-note p {
@@ -217,6 +219,16 @@ button {
   font-weight: 750;
   line-height: 1.45;
   margin: 0;
+}
+
+.sidebar-reset {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(9, 118, 168, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--primary-dark);
+  font-weight: 850;
 }
 
 .sidebar-resizer {
@@ -327,12 +339,6 @@ button {
   line-height: 1.45;
 }
 
-.top-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0;
@@ -383,17 +389,18 @@ button {
 
 .toolbar {
   display: grid;
-  grid-template-columns: 2fr repeat(3, minmax(130px, 1fr)) auto;
+  grid-template-columns: 2fr repeat(3, minmax(130px, 1fr));
   gap: 12px;
   align-items: end;
   margin-bottom: 16px;
 }
 
-.toolbar-actions {
+.table-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
   flex-wrap: wrap;
+  margin: 12px 0 16px;
 }
 
 label,
@@ -407,6 +414,12 @@ label,
 
 .filter-control {
   position: relative;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 input,
@@ -1408,11 +1421,11 @@ tbody tr:hover {
     text-align: left;
   }
 
-  .toolbar-actions {
+  .table-actions {
     justify-content: stretch;
   }
 
-  .toolbar-actions button {
+  .table-actions button {
     flex: 1 1 180px;
   }
 }
