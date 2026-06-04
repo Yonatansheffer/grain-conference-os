@@ -3,37 +3,46 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Grain Conference OS</title>
+    <title>Grain Conference Tool</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="sidebar">
+    <div class="app-shell" id="appShell">
+      <aside class="sidebar" id="sidebar">
         <div class="brand">
-          <div class="brand-mark">G</div>
-          <div>
-            <h1>Conference OS</h1>
-            <p>Pipeline planning for Grain</p>
-          </div>
+          <a class="grain-logo" href="https://www.grainfinance.co/" target="_blank" rel="noreferrer" aria-label="Grain website">
+            <span class="grain-logo-mark">G</span>
+            <span class="grain-logo-text">Grain</span>
+          </a>
+          <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Collapse sidebar" aria-expanded="true">
+            <span></span>
+            <span></span>
+          </button>
+        </div>
+        <div class="product-name">
+          <h1>Grain Conference Tool</h1>
+          <p>Pipeline planning for Grain</p>
         </div>
         <nav class="nav" aria-label="Primary">
-          <button class="nav-item active" data-view="conferences">Conferences</button>
-          <button class="nav-item" data-view="planning">Planning</button>
-          <button class="nav-item" data-view="capture">Capture</button>
-          <button class="nav-item" data-view="relationships">Relationships</button>
-          <button class="nav-item" data-view="settings">Settings</button>
+          <button class="nav-item active" data-view="conferences" title="Conferences"><span class="nav-icon">C</span><span class="nav-label">Conferences</span></button>
+          <button class="nav-item" data-view="planning" title="Planning"><span class="nav-icon">P</span><span class="nav-label">Planning</span></button>
+          <button class="nav-item" data-view="capture" title="Capture"><span class="nav-icon">L</span><span class="nav-label">Capture</span></button>
+          <button class="nav-item" data-view="relationships" title="Relationships"><span class="nav-icon">R</span><span class="nav-label">Relationships</span></button>
+          <button class="nav-item" data-view="settings" title="Settings"><span class="nav-icon">S</span><span class="nav-label">Settings</span></button>
         </nav>
         <div class="sidebar-note">
           <span class="eyebrow">ICP Lens</span>
           <p>PSPs, cross-border payments, travel wholesalers, fintech treasury, and high-volume SaaS with FX exposure.</p>
         </div>
+        <div class="sidebar-resizer" id="sidebarResizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical"></div>
       </aside>
 
       <main class="main">
         <section class="topbar">
           <div>
             <p class="eyebrow">Grain Fintech</p>
-            <h2 id="viewTitle">Conferences</h2>
+            <h2>Grain Conference Tool</h2>
+            <p class="view-label" id="viewTitle">Conferences</p>
           </div>
           <div class="top-actions">
             <button id="seedReset" class="ghost-button">Reset demo data</button>

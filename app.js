@@ -1,4 +1,7 @@
 const STORAGE_KEY = "grain-conference-os";
+const SIDEBAR_KEY = "grain-conference-sidebar";
+const SIDEBAR_MIN = 220;
+const SIDEBAR_MAX = 380;
 
 const state = loadState();
 let selectedConferenceId = state.conferences[0]?.id;
@@ -126,10 +129,61 @@ function renderNav() {
       $$(".view").forEach((v) => v.classList.remove("active"));
       button.classList.add("active");
       $(`#${button.dataset.view}`).classList.add("active");
-      $("#viewTitle").textContent = button.textContent;
+      $("#viewTitle").textContent = button.querySelector(".nav-label")?.textContent || button.textContent;
       renderAll();
     });
   });
+}
+
+function setupSidebar() {
+  const shell = $("#appShell");
+  const toggle = $("#sidebarToggle");
+  const resizer = $("#sidebarResizer");
+  const saved = JSON.parse(localStorage.getItem(SIDEBAR_KEY) || "{}");
+
+  if (saved.width) {
+    shell.style.setProperty("--sidebar-width", `${saved.width}px`);
+  }
+  if (saved.collapsed) {
+    shell.classList.add("sidebar-collapsed");
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Expand sidebar");
+  }
+
+  toggle.addEventListener("click", () => {
+    const collapsed = !shell.classList.contains("sidebar-collapsed");
+    shell.classList.toggle("sidebar-collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    localStorage.setItem(SIDEBAR_KEY, JSON.stringify({ ...savedSidebar(), collapsed }));
+  });
+
+  resizer.addEventListener("pointerdown", (event) => {
+    if (shell.classList.contains("sidebar-collapsed") || window.matchMedia("(max-width: 980px)").matches) return;
+    event.preventDefault();
+    resizer.classList.add("is-dragging");
+    resizer.setPointerCapture(event.pointerId);
+  });
+
+  resizer.addEventListener("pointermove", (event) => {
+    if (!resizer.classList.contains("is-dragging")) return;
+    const width = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, event.clientX));
+    shell.style.setProperty("--sidebar-width", `${width}px`);
+    localStorage.setItem(SIDEBAR_KEY, JSON.stringify({ ...savedSidebar(), width, collapsed: false }));
+  });
+
+  resizer.addEventListener("pointerup", (event) => {
+    resizer.classList.remove("is-dragging");
+    resizer.releasePointerCapture(event.pointerId);
+  });
+
+  resizer.addEventListener("pointercancel", () => {
+    resizer.classList.remove("is-dragging");
+  });
+}
+
+function savedSidebar() {
+  return JSON.parse(localStorage.getItem(SIDEBAR_KEY) || "{}");
 }
 
 function renderFilters() {
@@ -511,6 +565,7 @@ function renderAll() {
 }
 
 function setup() {
+  setupSidebar();
   renderNav();
   renderFilters();
   setupCapture();

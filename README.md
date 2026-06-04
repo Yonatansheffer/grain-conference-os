@@ -1,4 +1,4 @@
-# Grain Conference OS
+# Grain Conference Tool
 
 A no-build static web app for Grain's sales team to prioritize conferences, plan annual coverage, capture show-floor leads, detect repeat contacts, draft relationship summaries with optional AI, and export or push leads to HubSpot.
 
