@@ -740,28 +740,98 @@ tbody tr:hover {
   font-size: 13px;
 }
 
-.timeline {
+.calendar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.calendar-actions span {
+  min-width: 132px;
+  text-align: center;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.calendar {
   display: grid;
   gap: 10px;
 }
 
-.month-row {
+.calendar-weekdays,
+.calendar-grid {
   display: grid;
-  grid-template-columns: 42px 1fr 38px;
-  gap: 10px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.calendar-weekdays span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.calendar-day {
+  min-height: 112px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fffdf8;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.calendar-day.empty {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.calendar-day > strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.calendar-events {
+  display: grid;
+  gap: 4px;
+}
+
+.calendar-event {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 6px;
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 850;
+  text-align: left;
+  line-height: 1.25;
+}
+
+.cluster-config {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.inline-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: center;
 }
 
-.month-track {
-  height: 12px;
-  background: #edf2ee;
-  border-radius: 99px;
-  overflow: hidden;
+.inline-input span {
+  color: var(--muted);
+  font-weight: 850;
 }
 
-.month-fill {
-  height: 100%;
-  background: var(--blue);
+.compact-head {
+  margin-top: 4px;
 }
 
 .cluster-list,

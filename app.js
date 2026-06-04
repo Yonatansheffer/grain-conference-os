@@ -4,11 +4,20 @@ const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 380;
 const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist"];
 const TEAM_OPTIONS = ["Maya", "Noah", "Lior", "Dana", "Alex"];
+const PAGE_TITLES = {
+  conferences: "Conference prioritization",
+  planning: "Conference attendance planning",
+  capture: "Show-floor lead capture",
+  relationships: "Relationship intelligence",
+  settings: "Integration settings"
+};
 
 const state = migrateState(loadState());
 let selectedConferenceId = state.conferences[0]?.id;
 let filterState = { vertical: [], region: [], status: [] };
 let sortState = { key: "score", direction: "desc" };
+let calendarDate = new Date("2026-06-01T00:00:00");
+let clusterConfig = { regions: [], windowDays: 30 };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -143,6 +152,7 @@ function renderNav() {
       button.classList.add("active");
       $(`#${button.dataset.view}`).classList.add("active");
       $("#viewTitle").textContent = button.querySelector(".nav-label")?.textContent || button.textContent;
+      $("#pageTitle").textContent = PAGE_TITLES[button.dataset.view] || "Grain Conference Tool";
       renderAll();
     });
   });
@@ -206,9 +216,33 @@ function renderFilters() {
   renderMultiFilter("vertical", verticals, "verticals");
   renderMultiFilter("region", regions, "regions");
   renderMultiFilter("status", statuses, "statuses");
+  renderClusterRegionFilter(regions);
   $("#leadConference").innerHTML = state.conferences
     .map((c) => `<option value="${c.id}">${c.name} - ${c.city}</option>`)
     .join("");
+}
+
+function renderClusterRegionFilter(regions) {
+  const menu = $("#clusterRegionFilter");
+  const button = $("#clusterRegionButton");
+  if (!menu || !button) return;
+  button.textContent = clusterConfig.regions.length ? `${clusterConfig.regions.length} regions` : "All regions";
+  menu.innerHTML = [
+    `<button class="filter-clear" type="button" data-filter-clear="clusterRegion">Clear regions</button>`,
+    ...regions.map((region) => `<label class="multi-option"><input type="checkbox" value="${region}" ${clusterConfig.regions.includes(region) ? "checked" : ""}> <span>${region}</span></label>`)
+  ].join("");
+  menu.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("change", () => {
+      clusterConfig.regions = Array.from(menu.querySelectorAll("input:checked")).map((item) => item.value);
+      renderFilters();
+      renderPlanning();
+    });
+  });
+  menu.querySelector("[data-filter-clear]")?.addEventListener("click", () => {
+    clusterConfig.regions = [];
+    renderFilters();
+    renderPlanning();
+  });
 }
 
 function renderMultiFilter(key, options, pluralLabel) {
@@ -267,6 +301,22 @@ function setupSorting() {
       }
       renderConferenceRows();
     });
+  });
+}
+
+function setupPlanningControls() {
+  $("#calendarPrev").addEventListener("click", () => {
+    calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+    renderPlanning();
+  });
+  $("#calendarNext").addEventListener("click", () => {
+    calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+    renderPlanning();
+  });
+  $("#clusterWindow").addEventListener("input", (event) => {
+    const value = Number(event.currentTarget.value);
+    clusterConfig.windowDays = Math.max(1, Math.min(90, Number.isFinite(value) ? value : 30));
+    renderPlanning();
   });
 }
 
@@ -447,19 +497,11 @@ function scoreNarrative(c) {
 }
 
 function renderPlanning() {
-  const months = Array.from({ length: 12 }, (_, i) => ({ index: i, label: new Date(2026, i, 1).toLocaleString("en-US", { month: "short" }), events: [] }));
-  state.conferences.forEach((c) => months[new Date(c.startDate + "T00:00:00").getMonth()].events.push(c));
-  const max = Math.max(...months.map((m) => m.events.length), 1);
   $("#coverageSummary").textContent = `${state.conferences.filter((c) => c.status === "Committed").length} committed events`;
-  $("#timeline").innerHTML = months
-    .map((m) => `<div class="month-row">
-      <strong>${m.label}</strong>
-      <div class="month-track"><div class="month-fill" style="width:${(m.events.length / max) * 100}%"></div></div>
-      <span>${m.events.length}</span>
-    </div>`)
-    .join("");
+  renderCalendar();
 
   const clusters = findClusters();
+  $("#clusterSummary").textContent = `${clusterConfig.windowDays}-day window`;
   $("#clusters").innerHTML = clusters.length
     ? clusters.map((cluster) => `<div class="cluster"><strong>${cluster.city || cluster.region} cluster</strong><span>${cluster.events.map((e) => `${e.name} (${formatDateRange(e)})`).join(" | ")}</span></div>`).join("")
     : "<p class='muted'>No clusters found.</p>";
@@ -476,13 +518,50 @@ function renderPlanning() {
     .join("");
 }
 
+function renderCalendar() {
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const label = calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" });
+  $("#calendarLabel").textContent = label;
+  const first = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const blanks = first.getDay();
+  const monthEvents = state.conferences.filter((event) => {
+    const eventDate = new Date(event.startDate + "T00:00:00");
+    return eventDate.getFullYear() === year && eventDate.getMonth() === month;
+  });
+  const cells = [];
+  for (let i = 0; i < blanks; i += 1) cells.push(`<div class="calendar-day empty"></div>`);
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const events = monthEvents.filter((event) => new Date(event.startDate + "T00:00:00").getDate() === day);
+    cells.push(`<div class="calendar-day">
+      <strong>${day}</strong>
+      <div class="calendar-events">
+        ${events.map((event) => `<button class="calendar-event tier-${tierFor(scoreConference(event)).toLowerCase()}" type="button" data-calendar-event="${event.id}">${event.name}</button>`).join("")}
+      </div>
+    </div>`);
+  }
+  $("#eventCalendar").innerHTML = `
+    <div class="calendar-weekdays">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => `<span>${day}</span>`).join("")}</div>
+    <div class="calendar-grid">${cells.join("")}</div>
+  `;
+  $$("[data-calendar-event]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedConferenceId = button.dataset.calendarEvent;
+      renderSelectedConference();
+      document.querySelector("[data-view='conferences']").click();
+    });
+  });
+}
+
 function findClusters() {
   const sorted = [...state.conferences].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
   const clusters = [];
   sorted.forEach((event, index) => {
     const window = sorted.slice(index + 1).filter((other) => {
       const days = (new Date(other.startDate) - new Date(event.startDate)) / 86400000;
-      return days >= 0 && days <= 30 && (other.region === event.region || other.city === event.city);
+      const regionAllowed = !clusterConfig.regions.length || clusterConfig.regions.includes(event.region) || clusterConfig.regions.includes(other.region);
+      return regionAllowed && days >= 0 && days <= clusterConfig.windowDays && (other.region === event.region || other.city === event.city);
     });
     if (window.length) clusters.push({ region: event.region, city: window.some((w) => w.city === event.city) ? event.city : "", events: [event, ...window] });
   });
@@ -717,6 +796,7 @@ function setup() {
   renderFilters();
   setupFilterControls();
   setupSorting();
+  setupPlanningControls();
   setupCapture();
   setupSettings();
   $("#searchInput").addEventListener("input", renderConferenceRows);

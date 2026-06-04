@@ -40,7 +40,7 @@
         <section class="topbar">
           <div>
             <p class="eyebrow">Grain Fintech</p>
-            <h2>Grain Conference Tool</h2>
+            <h2 id="pageTitle">Conference prioritization</h2>
             <p class="view-label" id="viewTitle">Conferences</p>
           </div>
           <div class="top-actions">
@@ -96,15 +96,37 @@
           <div class="planning-grid">
             <div class="panel">
               <div class="panel-head">
-                <h3>Year Coverage</h3>
-                <span id="coverageSummary"></span>
+                <h3>Event Calendar</h3>
+                <div class="calendar-actions">
+                  <button id="calendarPrev" class="ghost-button" type="button">Prev</button>
+                  <span id="calendarLabel"></span>
+                  <button id="calendarNext" class="ghost-button" type="button">Next</button>
+                </div>
               </div>
-              <div id="timeline" class="timeline"></div>
+              <div id="eventCalendar" class="calendar"></div>
             </div>
             <div class="panel">
               <div class="panel-head">
+                <h3>Cluster Configuration</h3>
+                <span id="coverageSummary"></span>
+              </div>
+              <div class="cluster-config">
+                <div class="filter-control">
+                  <span>Regions</span>
+                  <button class="multi-filter-button" id="clusterRegionButton" type="button" data-filter-button="clusterRegion">All regions</button>
+                  <div class="multi-filter-menu" id="clusterRegionFilter" data-filter="clusterRegion"></div>
+                </div>
+                <label>
+                  Time window
+                  <div class="inline-input">
+                    <input id="clusterWindow" type="number" min="1" max="90" step="1" value="30">
+                    <span>days</span>
+                  </div>
+                </label>
+              </div>
+              <div class="panel-head compact-head">
                 <h3>Trip Clusters</h3>
-                <span>30-day window</span>
+                <span id="clusterSummary">30-day window</span>
               </div>
               <div id="clusters" class="cluster-list"></div>
             </div>
