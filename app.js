@@ -2,9 +2,13 @@ const STORAGE_KEY = "grain-conference-os";
 const SIDEBAR_KEY = "grain-conference-sidebar";
 const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 380;
+const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist"];
+const TEAM_OPTIONS = ["Maya", "Noah", "Lior", "Dana", "Alex"];
 
-const state = loadState();
+const state = migrateState(loadState());
 let selectedConferenceId = state.conferences[0]?.id;
+let filterState = { vertical: [], region: [], status: [] };
+let sortState = { key: "score", direction: "desc" };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -18,6 +22,15 @@ function loadState() {
     ai: { key: "", model: "gpt-4o-mini" },
     hubspot: { token: "" }
   };
+}
+
+function migrateState(loaded) {
+  loaded.conferences = loaded.conferences.map((conference) => {
+    if (Array.isArray(conference.team)) return conference;
+    const team = conference.owner && conference.owner !== "Unassigned" ? [conference.owner] : [];
+    return { ...conference, team };
+  });
+  return loaded;
 }
 
 function clone(value) {
@@ -189,36 +202,107 @@ function savedSidebar() {
 function renderFilters() {
   const verticals = [...new Set(state.conferences.flatMap((c) => c.verticals))].sort();
   const regions = [...new Set(state.conferences.map((c) => c.region))].sort();
-  const statuses = [...new Set(state.conferences.map((c) => c.status))].sort();
-  fillSelect("#verticalFilter", ["All verticals", ...verticals]);
-  fillSelect("#regionFilter", ["All regions", ...regions]);
-  fillSelect("#statusFilter", ["All statuses", ...statuses]);
+  const statuses = [...new Set([...STATUS_OPTIONS, ...state.conferences.map((c) => c.status)])].sort();
+  renderMultiFilter("vertical", verticals, "verticals");
+  renderMultiFilter("region", regions, "regions");
+  renderMultiFilter("status", statuses, "statuses");
   $("#leadConference").innerHTML = state.conferences
     .map((c) => `<option value="${c.id}">${c.name} - ${c.city}</option>`)
     .join("");
 }
 
-function fillSelect(selector, values) {
-  const element = $(selector);
-  const current = element.value;
-  element.innerHTML = values.map((v) => `<option>${v}</option>`).join("");
-  if (values.includes(current)) element.value = current;
+function renderMultiFilter(key, options, pluralLabel) {
+  const menu = $(`#${key}Filter`);
+  const button = $(`#${key}FilterButton`);
+  const selected = filterState[key] || [];
+  button.textContent = selected.length ? `${selected.length} ${pluralLabel}` : `All ${pluralLabel}`;
+  menu.innerHTML = [
+    `<button class="filter-clear" type="button" data-filter-clear="${key}">Clear ${key}</button>`,
+    ...options.map((option) => `<label class="multi-option"><input type="checkbox" value="${option}" ${selected.includes(option) ? "checked" : ""}> <span>${option}</span></label>`)
+  ].join("");
+  menu.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("change", () => {
+      filterState[key] = Array.from(menu.querySelectorAll("input:checked")).map((item) => item.value);
+      renderFilters();
+      renderConferenceRows();
+    });
+  });
+  menu.querySelector("[data-filter-clear]")?.addEventListener("click", () => {
+    filterState[key] = [];
+    renderFilters();
+    renderConferenceRows();
+  });
+}
+
+function setupFilterControls() {
+  $$("[data-filter-button]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const key = button.dataset.filterButton;
+      $$(".multi-filter-menu").forEach((menu) => {
+        if (menu.dataset.filter !== key) menu.classList.remove("open");
+      });
+      $(`#${key}Filter`).classList.toggle("open");
+    });
+  });
+
+  $$(".multi-filter-menu").forEach((menu) => {
+    menu.addEventListener("click", (event) => event.stopPropagation());
+  });
+
+  document.addEventListener("click", () => {
+    $$(".multi-filter-menu").forEach((menu) => menu.classList.remove("open"));
+    $$(".team-menu").forEach((menu) => menu.classList.remove("open"));
+  });
+}
+
+function setupSorting() {
+  $$(".sort-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.sort;
+      if (sortState.key === key) {
+        sortState.direction = sortState.direction === "asc" ? "desc" : "asc";
+      } else {
+        sortState = { key, direction: ["audience", "score", "date"].includes(key) ? "desc" : "asc" };
+      }
+      renderConferenceRows();
+    });
+  });
 }
 
 function filteredConferences() {
   const query = normalize($("#searchInput").value);
-  const vertical = $("#verticalFilter").value;
-  const region = $("#regionFilter").value;
-  const status = $("#statusFilter").value;
   return state.conferences
     .filter((c) => {
-      const haystack = normalize(`${c.name} ${c.city} ${c.country} ${c.verticals.join(" ")}`);
+      const haystack = normalize(`${c.name} ${c.city} ${c.country} ${c.region} ${c.verticals.join(" ")} ${teamLabel(c)}`);
       return !query || haystack.includes(query);
     })
-    .filter((c) => vertical === "All verticals" || c.verticals.includes(vertical))
-    .filter((c) => region === "All regions" || c.region === region)
-    .filter((c) => status === "All statuses" || c.status === status)
-    .sort((a, b) => scoreConference(b) - scoreConference(a));
+    .filter((c) => !filterState.vertical.length || c.verticals.some((vertical) => filterState.vertical.includes(vertical)))
+    .filter((c) => !filterState.region.length || filterState.region.includes(c.region))
+    .filter((c) => !filterState.status.length || filterState.status.includes(c.status))
+    .sort(compareConferences);
+}
+
+function compareConferences(a, b) {
+  const direction = sortState.direction === "asc" ? 1 : -1;
+  const valueA = sortValue(a, sortState.key);
+  const valueB = sortValue(b, sortState.key);
+  if (typeof valueA === "number" && typeof valueB === "number") return (valueA - valueB) * direction;
+  return String(valueA).localeCompare(String(valueB), undefined, { numeric: true, sensitivity: "base" }) * direction;
+}
+
+function sortValue(c, key) {
+  const values = {
+    name: c.name,
+    date: new Date(c.startDate).getTime(),
+    location: `${c.region} ${c.city} ${c.country}`,
+    verticals: c.verticals.join(", "),
+    audience: c.audience,
+    score: scoreConference(c),
+    team: teamLabel(c),
+    status: c.status
+  };
+  return values[key] ?? "";
 }
 
 function renderMetrics(items) {
@@ -238,19 +322,20 @@ function renderMetrics(items) {
 function renderConferenceRows() {
   const items = filteredConferences();
   renderMetrics(items);
+  renderSortButtons();
   $("#conferenceRows").innerHTML = items
     .map((c) => {
       const score = scoreConference(c);
       const tier = tierFor(score);
       return `<tr data-id="${c.id}">
-        <td><strong>${c.name}</strong><br><span class="muted">${c.owner}</span></td>
+        <td><strong>${c.name}</strong></td>
         <td>${formatDateRange(c)}</td>
-        <td>${c.city}, ${c.country}</td>
+        <td><strong>${c.region}</strong><br><span class="muted">${c.city}, ${c.country}</span></td>
         <td>${c.verticals.map((v) => `<span class="pill">${v}</span>`).join(" ")}</td>
         <td>${c.audience.toLocaleString()}</td>
-        <td><div class="score"><strong>${score}</strong><div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div></div></td>
-        <td><span class="pill tier-${tier.toLowerCase()}">Tier ${tier}</span></td>
-        <td><span class="pill status-${c.status.toLowerCase()}">${c.status}</span></td>
+        <td><div class="score"><strong>${score} <span class="pill tier-${tier.toLowerCase()}">Tier ${tier}</span></strong><div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div></div></td>
+        <td>${renderTeamSelect(c)}</td>
+        <td>${renderStatusSelect(c)}</td>
       </tr>`;
     })
     .join("");
@@ -260,8 +345,69 @@ function renderConferenceRows() {
       renderSelectedConference();
     });
   });
+  $$(".table-select").forEach((select) => {
+    select.addEventListener("click", (event) => event.stopPropagation());
+    select.addEventListener("change", handleTableEdit);
+  });
+  $$(".team-editor").forEach((editor) => {
+    editor.addEventListener("click", (event) => event.stopPropagation());
+    editor.querySelector(".team-button").addEventListener("click", () => {
+      $$(".team-menu").forEach((menu) => {
+        if (menu !== editor.querySelector(".team-menu")) menu.classList.remove("open");
+      });
+      editor.querySelector(".team-menu").classList.toggle("open");
+    });
+    editor.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("change", () => handleTeamEdit(editor));
+    });
+  });
   if (!items.some((c) => c.id === selectedConferenceId)) selectedConferenceId = items[0]?.id;
   renderSelectedConference();
+}
+
+function renderSortButtons() {
+  $$(".sort-button").forEach((button) => {
+    const active = button.dataset.sort === sortState.key;
+    button.classList.toggle("active", active);
+    button.dataset.direction = active ? sortState.direction : "";
+    button.setAttribute("aria-sort", active ? (sortState.direction === "asc" ? "ascending" : "descending") : "none");
+  });
+}
+
+function renderStatusSelect(c) {
+  return `<select class="table-select status-select" data-edit="status" data-id="${c.id}" aria-label="Status for ${c.name}">
+    ${STATUS_OPTIONS.map((status) => `<option value="${status}" ${c.status === status ? "selected" : ""}>${status}</option>`).join("")}
+  </select>`;
+}
+
+function renderTeamSelect(c) {
+  const team = Array.isArray(c.team) ? c.team : [];
+  return `<div class="team-editor" data-id="${c.id}">
+    <button class="table-select team-button" type="button" aria-label="Team for ${c.name}">${teamLabel(c)}</button>
+    <div class="team-menu">
+      ${TEAM_OPTIONS.map((person) => `<label class="multi-option"><input type="checkbox" value="${person}" ${team.includes(person) ? "checked" : ""}> <span>${person}</span></label>`).join("")}
+    </div>
+  </div>`;
+}
+
+function handleTableEdit(event) {
+  const conference = state.conferences.find((c) => c.id === event.currentTarget.dataset.id);
+  if (!conference) return;
+  conference.status = event.currentTarget.value;
+  saveState();
+  renderAll();
+}
+
+function handleTeamEdit(editor) {
+  const conference = state.conferences.find((c) => c.id === editor.dataset.id);
+  if (!conference) return;
+  conference.team = Array.from(editor.querySelectorAll("input:checked")).map((input) => input.value);
+  saveState();
+  renderAll();
+}
+
+function teamLabel(c) {
+  return Array.isArray(c.team) && c.team.length ? c.team.join(", ") : "Unassigned";
 }
 
 function renderSelectedConference() {
@@ -279,6 +425,7 @@ function renderSelectedConference() {
       <p class="eyebrow">Selected event</p>
       <h3>${c.name}</h3>
       <p>${formatDateRange(c)} in ${c.city}, ${c.country}. Estimated ${c.audience.toLocaleString()} attendees.</p>
+      <p><strong>Team:</strong> ${teamLabel(c)}</p>
       <p><a href="${c.source}" target="_blank" rel="noreferrer">Source</a></p>
     </div>
     <div>
@@ -568,9 +715,11 @@ function setup() {
   setupSidebar();
   renderNav();
   renderFilters();
+  setupFilterControls();
+  setupSorting();
   setupCapture();
   setupSettings();
-  ["searchInput", "verticalFilter", "regionFilter", "statusFilter"].forEach((id) => $(`#${id}`).addEventListener("input", renderConferenceRows));
+  $("#searchInput").addEventListener("input", renderConferenceRows);
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#seedReset").addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);

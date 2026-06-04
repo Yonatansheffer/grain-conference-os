@@ -21,14 +21,13 @@
         </div>
         <div class="product-name">
           <h1>Grain Conference Tool</h1>
-          <p>Pipeline planning for Grain</p>
         </div>
         <nav class="nav" aria-label="Primary">
-          <button class="nav-item active" data-view="conferences" title="Conferences"><span class="nav-icon">C</span><span class="nav-label">Conferences</span></button>
-          <button class="nav-item" data-view="planning" title="Planning"><span class="nav-icon">P</span><span class="nav-label">Planning</span></button>
-          <button class="nav-item" data-view="capture" title="Capture"><span class="nav-icon">L</span><span class="nav-label">Capture</span></button>
-          <button class="nav-item" data-view="relationships" title="Relationships"><span class="nav-icon">R</span><span class="nav-label">Relationships</span></button>
-          <button class="nav-item" data-view="settings" title="Settings"><span class="nav-icon">S</span><span class="nav-label">Settings</span></button>
+          <button class="nav-item active" data-view="conferences" title="Conferences"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M4 9h16M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></svg></span><span class="nav-label">Conferences</span></button>
+          <button class="nav-item" data-view="planning" title="Planning"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-9"/></svg></span><span class="nav-label">Planning</span></button>
+          <button class="nav-item" data-view="capture" title="Capture"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11h6M12 8v6M5 4h14v16H5zM8 2h8"/></svg></span><span class="nav-label">Capture</span></button>
+          <button class="nav-item" data-view="relationships" title="Relationships"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0M3 21a7 7 0 0 1 14 0M17 8h2a3 3 0 0 1 0 6h-2"/></svg></span><span class="nav-label">Relationships</span></button>
+          <button class="nav-item" data-view="settings" title="Settings"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5ZM19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2-1.1L14 3h-4l-.5 2.8a7 7 0 0 0-2 1.1l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2 1.1L10 21h4l.5-2.8a7 7 0 0 0 2-1.1l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/></svg></span><span class="nav-label">Settings</span></button>
         </nav>
         <div class="sidebar-note">
           <span class="eyebrow">ICP Lens</span>
@@ -57,31 +56,34 @@
               Search
               <input id="searchInput" type="search" placeholder="Money20/20, PSP, London">
             </label>
-            <label>
-              Vertical
-              <select id="verticalFilter"></select>
-            </label>
-            <label>
-              Region
-              <select id="regionFilter"></select>
-            </label>
-            <label>
-              Status
-              <select id="statusFilter"></select>
-            </label>
+            <div class="filter-control">
+              <span>Vertical</span>
+              <button class="multi-filter-button" id="verticalFilterButton" type="button" data-filter-button="vertical">All verticals</button>
+              <div class="multi-filter-menu" id="verticalFilter" data-filter="vertical"></div>
+            </div>
+            <div class="filter-control">
+              <span>Region</span>
+              <button class="multi-filter-button" id="regionFilterButton" type="button" data-filter-button="region">All regions</button>
+              <div class="multi-filter-menu" id="regionFilter" data-filter="region"></div>
+            </div>
+            <div class="filter-control">
+              <span>Status</span>
+              <button class="multi-filter-button" id="statusFilterButton" type="button" data-filter-button="status">All statuses</button>
+              <div class="multi-filter-menu" id="statusFilter" data-filter="status"></div>
+            </div>
           </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Conference</th>
-                  <th>Date</th>
-                  <th>Location</th>
-                  <th>Verticals</th>
-                  <th>Audience</th>
-                  <th>ICP Score</th>
-                  <th>Tier</th>
-                  <th>Status</th>
+                  <th><button class="sort-button" type="button" data-sort="name">Conference</button></th>
+                  <th><button class="sort-button" type="button" data-sort="date">Date</button></th>
+                  <th><button class="sort-button" type="button" data-sort="location">Location</button></th>
+                  <th><button class="sort-button" type="button" data-sort="verticals">Verticals</button></th>
+                  <th><button class="sort-button" type="button" data-sort="audience">Audience</button></th>
+                  <th><button class="sort-button" type="button" data-sort="score">ICP / Tier</button></th>
+                  <th><button class="sort-button" type="button" data-sort="team">Team</button></th>
+                  <th><button class="sort-button" type="button" data-sort="status">Status</button></th>
                 </tr>
               </thead>
               <tbody id="conferenceRows"></tbody>
