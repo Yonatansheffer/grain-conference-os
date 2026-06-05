@@ -5,10 +5,15 @@ let filterState = { vertical: [], region: [], status: [] };
 let opportunityFilter = null;
 let sortState = { key: "score", direction: "desc" };
 let calendarDate = new Date("2026-06-01T00:00:00");
-let clusterConfig = { regions: [], windowDays: 30 };
-let visibleGapSegments = ["Payments", "Travel", "Fintech", "SaaS"];
+let clusterConfig = { regions: [], windowDays: 10 };
+let visibleGapSegments = allVerticals();
+let scoutState = { gap: null, results: [], loading: false, resolvedGapKey: "" };
 let speechRecognition = null;
 let isRecordingScribble = false;
+let scoutRecognition = null;
+let isRecordingScout = false;
+let scoutMediaRecorder = null;
+let scoutAudioChunks = [];
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -92,6 +97,70 @@ function tierFor(score) {
   if (score >= 78) return "A";
   if (score >= 62) return "B";
   return "C";
+}
+
+function allVerticals() {
+  return [...new Set((state?.conferences || []).flatMap((conference) => conference.verticals || []))].sort();
+}
+
+function activeConferenceStatuses() {
+  return [...CONFIRMED_STATUSES, "Booked"];
+}
+
+function quarterKey(dateValue) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  const quarter = Math.floor(date.getMonth() / 3) + 1;
+  return `Q${quarter} ${date.getFullYear()}`;
+}
+
+function quarterDateRange(label) {
+  const match = /^Q([1-4])\s+(\d{4})$/.exec(label || "");
+  if (!match) return { start: "2026-07-01", end: "2026-09-30" };
+  const quarter = Number(match[1]);
+  const year = Number(match[2]);
+  const startMonth = (quarter - 1) * 3;
+  const start = new Date(year, startMonth, 1);
+  const end = new Date(year, startMonth + 3, 0);
+  return { start: toIsoDate(start), end: toIsoDate(end) };
+}
+
+function toIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function conferenceMatchesVertical(conference, vertical) {
+  const terms = String(vertical || "").split(/\s+|\/|,/).filter(Boolean).map(normalize);
+  const verticals = (conference.verticals || []).map(normalize);
+  return terms.some((term) => verticals.some((item) => item.includes(term) || term.includes(item)));
+}
+
+function analyzePipelineGap() {
+  if (scoutState.resolvedGapKey === "__all__") return null;
+  const activeStatuses = activeConferenceStatuses();
+  const activeEvents = state.conferences.filter((event) => activeStatuses.includes(event.status));
+  const criticalVerticals = ["Travel Wholesalers", "Payments", "Fintech", "Banking"];
+  const startDate = new Date("2026-07-01T00:00:00");
+  const quarters = ["Q3 2026", "Q4 2026", "Q1 2027", "Q2 2027"];
+  const gaps = quarters.flatMap((quarter) => {
+    const quarterEvents = activeEvents.filter((event) => quarterKey(event.startDate) === quarter);
+    return criticalVerticals.map((vertical) => {
+      const covered = quarterEvents.filter((event) => conferenceMatchesVertical(event, vertical));
+      const coverage = quarterEvents.length ? Math.round((covered.length / quarterEvents.length) * 100) : 0;
+      return {
+        key: `${vertical}-${quarter}`,
+        vertical,
+        quarter,
+        coverage,
+        eventCount: covered.length,
+        totalEvents: quarterEvents.length,
+        ...quarterDateRange(quarter)
+      };
+    });
+  });
+  return gaps.find((gap) => gap.coverage < 15 && gap.key !== scoutState.resolvedGapKey && new Date(`${gap.start}T00:00:00`) >= startDate) || null;
 }
 
 
@@ -325,9 +394,365 @@ function setupPlanningControls() {
   });
   $("#clusterWindow").addEventListener("input", (event) => {
     const value = Number(event.currentTarget.value);
-    clusterConfig.windowDays = Math.max(1, Math.min(90, Number.isFinite(value) ? value : 30));
+    clusterConfig.windowDays = Math.max(1, Math.min(90, Number.isFinite(value) ? value : 10));
     renderPlanning();
   });
+  $("#runScoutSearch")?.addEventListener("click", runScoutSearch);
+  $("#scoutMic")?.addEventListener("click", toggleScoutVoicePrompt);
+}
+
+async function runScoutSearch() {
+  const prompt = $("#scoutPrompt")?.value.trim();
+  if (!prompt) {
+    $("#scoutStatus").textContent = "Enter a scout prompt or resolve the active gap first.";
+    return;
+  }
+  scoutState.loading = true;
+  $("#scoutStatus").textContent = "Building structured conference candidates...";
+  renderScoutResults();
+  try {
+    const rawResults = state.ai.key ? await fetchAiScoutResults(prompt) : localScoutResults(prompt);
+    scoutState.results = processScoutResults(rawResults);
+    $("#scoutStatus").textContent = scoutState.results.length
+      ? `${scoutState.results.length} validated candidates ready.`
+      : "No validated 2026/2027 candidates matched the guardrails.";
+  } catch (error) {
+    scoutState.results = processScoutResults(localScoutResults(prompt));
+    $("#scoutStatus").textContent = `AI scout fell back to local heuristics: ${error.message}`;
+  } finally {
+    scoutState.loading = false;
+    renderScoutResults();
+  }
+}
+
+async function fetchAiScoutResults(prompt) {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${state.ai.key}`
+    },
+    body: JSON.stringify({
+      model: state.ai.model || "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are Grain's Proactive AI Pipeline Scout.",
+            "Return only JSON with an events array.",
+            "Each event must have name, startDate, endDate, city, country, region, verticals, audience, seniority, buyerDensity, fxRelevance, travelRelevance, pspRelevance, costTier, source, and pitchHook.",
+            "Only include realistic conference dates in 2026 or 2027.",
+            "Prioritize PSPs, payments, travel wholesalers, CFOs, treasurers, finance leaders, and enterprise FX exposure."
+          ].join(" ")
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            prompt,
+            existingEvents: state.conferences.map((event) => ({
+              id: event.id,
+              name: event.name,
+              startDate: event.startDate,
+              city: event.city,
+              country: event.country,
+              verticals: event.verticals
+            }))
+          })
+        }
+      ]
+    })
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || "{}";
+  return JSON.parse(content).events || [];
+}
+
+function localScoutResults(prompt) {
+  const wantsTravel = /travel|wholesale|tour|airline/i.test(prompt);
+  const wantsQ3 = /july|august|september|q3/i.test(prompt);
+  const candidates = [
+    {
+      name: "GBTA Convention 2026",
+      startDate: "2026-07-20",
+      endDate: "2026-07-22",
+      city: "Denver",
+      country: "USA",
+      region: "North America",
+      verticals: ["Travel", "Travel Tech", "Wholesalers", "Corporate Travel"],
+      audience: 5300,
+      seniority: 4,
+      buyerDensity: 4,
+      fxRelevance: 5,
+      travelRelevance: 5,
+      pspRelevance: 2,
+      costTier: 3,
+      source: "https://www.gbta.org/convention",
+      pitchHook: "Corporate travel buyers and wholesale operators face live currency-margin exposure across global supplier contracts. Emphasize Grain's automated hedging workflows and forward booking controls."
+    },
+    {
+      name: "Skift Global Forum 2026",
+      startDate: "2026-09-16",
+      endDate: "2026-09-18",
+      city: "New York",
+      country: "USA",
+      region: "North America",
+      verticals: ["Travel", "Hospitality", "Airlines", "Wholesalers"],
+      audience: 1400,
+      seniority: 5,
+      buyerDensity: 4,
+      fxRelevance: 4,
+      travelRelevance: 5,
+      pspRelevance: 2,
+      costTier: 3,
+      source: "https://skift.com/events/",
+      pitchHook: "Travel executives are actively comparing margin protection strategies for international inventory. Lead with CFO-level volatility control and faster booking-policy enforcement."
+    },
+    {
+      name: "BTN Group Business Travel Show America 2026",
+      startDate: "2026-08-12",
+      endDate: "2026-08-13",
+      city: "New York",
+      country: "USA",
+      region: "North America",
+      verticals: ["Travel", "Corporate Travel", "SaaS", "Wholesalers"],
+      audience: 2200,
+      seniority: 4,
+      buyerDensity: 4,
+      fxRelevance: 4,
+      travelRelevance: 5,
+      pspRelevance: 2,
+      costTier: 2,
+      source: "https://www.businesstravelshowamerica.com/",
+      pitchHook: "Managed travel and supplier-payment teams are exposed to FX slippage across negotiated global programs. Position Grain as the control layer between forecasted bookings and treasury execution."
+    },
+    {
+      name: "Money 20/20 Europe",
+      startDate: "2026-06-02",
+      endDate: "2026-06-04",
+      city: "Amsterdam",
+      country: "Netherlands",
+      region: "Europe",
+      verticals: ["Payments", "Fintech", "Banking"],
+      audience: 7400,
+      seniority: 5,
+      buyerDensity: 5,
+      fxRelevance: 5,
+      travelRelevance: 2,
+      pspRelevance: 5,
+      costTier: 4,
+      source: "https://europe.money2020.com/",
+      pitchHook: "This is already represented in the active directory and should be deduped rather than inserted again."
+    }
+  ];
+  return candidates.filter((event) => !wantsTravel || event.verticals.some((vertical) => /travel|wholesale|airline/i.test(vertical)))
+    .filter((event) => !wantsQ3 || ["2026-07", "2026-08", "2026-09"].some((prefix) => event.startDate.startsWith(prefix)));
+}
+
+function processScoutResults(events) {
+  return (Array.isArray(events) ? events : [])
+    .map(sanitizeScoutEvent)
+    .filter(Boolean)
+    .filter((event) => validateScoutDate(event.startDate) && validateScoutDate(event.endDate))
+    .map((event) => {
+      const duplicate = findDuplicateConference(event);
+      return {
+        event,
+        duplicate,
+        pitchHook: event.pitchHook || scoutPitchHook(event),
+        piggyback: duplicate ? "" : piggybackOpportunity(event)
+      };
+    });
+}
+
+function sanitizeScoutEvent(event) {
+  if (!event || typeof event !== "object") return null;
+  const name = String(event.name || "").trim();
+  const startDate = String(event.startDate || "").slice(0, 10);
+  const endDate = String(event.endDate || startDate).slice(0, 10);
+  if (!name || !startDate) return null;
+  return {
+    id: uniqueConferenceId(name, startDate),
+    name,
+    startDate,
+    endDate,
+    city: titleCase(String(event.city || "TBD").trim()),
+    country: titleCase(String(event.country || "TBD").trim()),
+    region: titleCase(String(event.region || "Global").trim()),
+    verticals: Array.isArray(event.verticals) ? event.verticals.map((item) => titleCase(String(item).trim())).filter(Boolean) : ["Travel"],
+    audience: Math.max(100, Math.round(Number(event.audience) || 1000)),
+    seniority: clampRating(event.seniority, 4),
+    buyerDensity: clampRating(event.buyerDensity, 4),
+    fxRelevance: clampRating(event.fxRelevance, 4),
+    travelRelevance: clampRating(event.travelRelevance, 4),
+    pspRelevance: clampRating(event.pspRelevance, 2),
+    costTier: clampRating(event.costTier, 3),
+    status: "Committed",
+    owner: "Unassigned",
+    source: String(event.source || "").trim(),
+    pitchHook: String(event.pitchHook || "").trim()
+  };
+}
+
+function clampRating(value, fallback) {
+  return Math.max(1, Math.min(5, Math.round(Number(value) || fallback)));
+}
+
+function validateScoutDate(value) {
+  const date = new Date(`${value}T00:00:00`);
+  const year = date.getFullYear();
+  return Number.isFinite(date.getTime()) && year >= 2026 && year <= 2027;
+}
+
+function uniqueConferenceId(name, startDate) {
+  const base = normalize(name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 44) || "scout-event";
+  const year = new Date(`${startDate}T00:00:00`).getFullYear() || 2026;
+  let id = `${base}-${year}`;
+  let count = 2;
+  while (state.conferences.some((event) => event.id === id)) {
+    id = `${base}-${year}-${count}`;
+    count += 1;
+  }
+  return id;
+}
+
+function findDuplicateConference(event) {
+  const candidate = normalizeConferenceName(event.name);
+  return state.conferences.find((existing) => {
+    const sameName = normalizeConferenceName(existing.name) === candidate || normalizeConferenceName(existing.name).includes(candidate) || candidate.includes(normalizeConferenceName(existing.name));
+    const sameMarket = normalize(existing.city) === normalize(event.city) || normalize(existing.country) === normalize(event.country);
+    const closeDate = Math.abs(new Date(existing.startDate) - new Date(event.startDate)) / 86400000 <= 14;
+    return sameName && sameMarket && closeDate;
+  });
+}
+
+function normalizeConferenceName(name) {
+  return normalize(name).replace(/\b(eu|europe|usa|us|global|forum|conference|summit|convention)\b/g, "").replace(/\s+/g, " ").trim();
+}
+
+function piggybackOpportunity(event) {
+  const active = state.conferences
+    .filter((existing) => activeConferenceStatuses().includes(existing.status))
+    .map((existing) => ({
+      event: existing,
+      days: Math.round((new Date(event.startDate) - new Date(existing.endDate || existing.startDate)) / 86400000)
+    }))
+    .filter((item) => item.days >= 0 && item.days <= 10 && (item.event.region === event.region || item.event.country === event.country))
+    .sort((a, b) => a.days - b.days)[0];
+  return active ? `This event takes place ${active.days} days after your approved trip to ${active.event.city}.` : "";
+}
+
+function scoutPitchHook(event) {
+  if ((event.verticals || []).some((vertical) => /travel|wholesale|airline/i.test(vertical))) {
+    return "Airlines and wholesale tour operators at this conference are facing currency-margin exposure. Emphasize Grain's automated forward contract booking mechanics.";
+  }
+  return "Prioritize CFO and treasury conversations where payment volume, cross-border settlement, and margin exposure create a measurable FX pain point.";
+}
+
+function addScoutEventToDirectory(id) {
+  const result = scoutState.results.find((item) => item.event.id === id);
+  if (!result || result.duplicate) return;
+  const event = { ...result.event };
+  delete event.pitchHook;
+  state.conferences.push(event);
+  if (scoutState.gap) scoutState.resolvedGapKey = "__all__";
+  scoutState.results = scoutState.results.filter((item) => item.event.id !== id);
+  selectedConferenceId = event.id;
+  saveState();
+  visibleGapSegments = allVerticals();
+  renderFilters();
+  renderAll();
+  $("#scoutStatus").textContent = `${event.name} added to the active directory.`;
+}
+
+function toggleScoutVoicePrompt() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const button = $("#scoutMic");
+  if (!SpeechRecognition) {
+    toggleScoutWhisperRecording();
+    return;
+  }
+  if (!scoutRecognition) {
+    scoutRecognition = new SpeechRecognition();
+    scoutRecognition.continuous = true;
+    scoutRecognition.interimResults = true;
+    scoutRecognition.lang = "en-US";
+    scoutRecognition.onresult = (event) => {
+      const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
+      $("#scoutPrompt").value = transcript.trim();
+    };
+    scoutRecognition.onend = () => {
+      isRecordingScout = false;
+      button?.classList.remove("recording");
+      $("#scoutStatus").textContent = "Voice prompt captured.";
+    };
+  }
+  if (isRecordingScout) {
+    scoutRecognition.stop();
+    return;
+  }
+  isRecordingScout = true;
+  button?.classList.add("recording");
+  $("#scoutStatus").textContent = "Listening for scout prompt...";
+  scoutRecognition.start();
+}
+
+async function toggleScoutWhisperRecording() {
+  const button = $("#scoutMic");
+  if (!state.ai.key) {
+    $("#scoutStatus").textContent = "Save an OpenAI-compatible API key to use Whisper transcription, or type the scout prompt.";
+    return;
+  }
+  if (isRecordingScout && scoutMediaRecorder) {
+    scoutMediaRecorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    $("#scoutStatus").textContent = "Audio recording is not supported in this browser.";
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    scoutAudioChunks = [];
+    scoutMediaRecorder = new MediaRecorder(stream);
+    scoutMediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size) scoutAudioChunks.push(event.data);
+    });
+    scoutMediaRecorder.addEventListener("stop", async () => {
+      stream.getTracks().forEach((track) => track.stop());
+      isRecordingScout = false;
+      button?.classList.remove("recording");
+      await transcribeScoutAudio();
+    });
+    isRecordingScout = true;
+    button?.classList.add("recording");
+    $("#scoutStatus").textContent = "Recording scout prompt. Click the mic again to transcribe.";
+    scoutMediaRecorder.start();
+  } catch (error) {
+    $("#scoutStatus").textContent = `Microphone access failed: ${error.message}`;
+  }
+}
+
+async function transcribeScoutAudio() {
+  if (!scoutAudioChunks.length) return;
+  $("#scoutStatus").textContent = "Transcribing voice prompt with Whisper...";
+  const audioBlob = new Blob(scoutAudioChunks, { type: scoutAudioChunks[0]?.type || "audio/webm" });
+  const formData = new FormData();
+  formData.append("model", "whisper-1");
+  formData.append("file", audioBlob, "pipeline-scout.webm");
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${state.ai.key}` },
+    body: formData
+  });
+  if (!response.ok) {
+    $("#scoutStatus").textContent = `Whisper transcription failed: ${await response.text()}`;
+    return;
+  }
+  const data = await response.json();
+  $("#scoutPrompt").value = String(data.text || "").trim();
+  $("#scoutStatus").textContent = "Voice prompt transcribed.";
 }
 
 function filteredConferences() {
@@ -496,6 +921,9 @@ function scoreNarrative(c) {
 
 function renderPlanning() {
   try {
+    scoutState.gap = analyzePipelineGap();
+    renderPipelineGapAlert();
+    renderScoutWorkspace();
     $("#coverageSummary").textContent = `${state.conferences.filter((c) => c.status === "Committed").length} committed events`;
     renderCalendar();
 
@@ -507,7 +935,8 @@ function renderPlanning() {
       button.addEventListener("click", () => addEventToTrip(button.dataset.addToTrip));
     });
 
-    const verticals = ["Payments", "Travel", "Fintech", "SaaS"];
+    const verticals = allVerticals();
+    if (!visibleGapSegments.length) visibleGapSegments = [...verticals];
     renderGapSegmentFilter(verticals);
     $("#gaps").innerHTML = verticals
       .filter((vertical) => visibleGapSegments.includes(vertical))
@@ -517,10 +946,95 @@ function renderPlanning() {
       button.addEventListener("click", () => viewSegmentOpportunities(button.dataset.gapOpportunities));
     });
   } catch (error) {
+    $("#pipelineGapAlert").innerHTML = "";
+    $("#scoutResults").innerHTML = "";
     $("#eventCalendar").innerHTML = `<div class="empty-state"><strong>Planning could not load.</strong><span>Reset demo data or refresh the page to rebuild the event calendar.</span></div>`;
     $("#clusters").innerHTML = "";
     $("#gaps").innerHTML = "";
   }
+}
+
+function renderPipelineGapAlert() {
+  const container = $("#pipelineGapAlert");
+  if (!container) return;
+  const gap = scoutState.gap;
+  if (!gap) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = `<div class="gap-alert-card">
+    <div>
+      <span class="eyebrow">AI Gap Alert</span>
+      <h3>⚠️ AI Gap Alert: Under-invested Vertical</h3>
+      <p>We currently have ${gap.coverage}% sales team coverage in the ${escapeHtml(gap.vertical)} vertical for ${escapeHtml(gap.quarter)}. This creates a critical pipeline gap for our enterprise FX hedging product.</p>
+    </div>
+    <button class="primary-button" type="button" data-resolve-gap>🪄 Resolve Gap via AI Scout</button>
+  </div>`;
+  container.querySelector("[data-resolve-gap]")?.addEventListener("click", resolveGapViaScout);
+}
+
+function resolveGapViaScout() {
+  const prompt = scoutPromptForGap(scoutState.gap);
+  $("#scoutPrompt").value = prompt;
+  $("#pipelineScout")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  setTimeout(() => $("#scoutPrompt")?.focus(), 350);
+}
+
+function scoutPromptForGap(gap) {
+  if (!gap) return "";
+  if (/travel/i.test(gap.vertical) && /Q3 2026/i.test(gap.quarter)) {
+    return "Find leading corporate travel wholesale and international fintech conferences in Europe or North America taking place between July and September 2026 with a high density of CFOs and finance leaders.";
+  }
+  const range = quarterDateRange(gap.quarter);
+  return `Find leading ${gap.vertical} conferences in Europe or North America taking place between ${range.start} and ${range.end} with a high density of CFOs, treasurers, and finance leaders.`;
+}
+
+function renderScoutWorkspace() {
+  const badge = $("#scoutModeBadge");
+  if (badge) {
+    badge.textContent = state.ai.key ? "AI scout active" : "Local scout ready";
+    badge.className = `status-badge ${state.ai.key ? "status-active" : "status-muted"}`;
+  }
+  renderScoutResults();
+}
+
+function renderScoutResults() {
+  const container = $("#scoutResults");
+  if (!container) return;
+  if (scoutState.loading) {
+    container.innerHTML = "<div class='empty-state'><strong>Scouting pipeline gaps...</strong><span>Validating calendar fit, dedupe risk, and trip proximity.</span></div>";
+    return;
+  }
+  container.innerHTML = scoutState.results.length
+    ? scoutState.results.map(renderScoutResultCard).join("")
+    : "";
+  $$("[data-add-scout-event]").forEach((button) => {
+    button.addEventListener("click", () => addScoutEventToDirectory(button.dataset.addScoutEvent));
+  });
+}
+
+function renderScoutResultCard(result) {
+  const event = result.event;
+  const score = scoreConference(event);
+  const tier = tierFor(score);
+  const duplicate = result.duplicate;
+  return `<div class="scout-card ${duplicate ? "scout-card-duplicate" : ""}">
+    <div class="scout-card-head">
+      <div>
+        <strong>${escapeHtml(event.name)}</strong>
+        <span>${escapeHtml(formatDateRange(event))} | ${escapeHtml(event.city)}, ${escapeHtml(event.country)}</span>
+      </div>
+      <span class="tier-flag tier-${tier.toLowerCase()}">Tier ${tier} - Score: ${score}</span>
+    </div>
+    <div class="scout-meta-grid">
+      <span>${escapeHtml(event.region)}</span>
+      <span>${Number(event.audience || 0).toLocaleString()} attendees</span>
+      <span>${escapeHtml((event.verticals || []).join(", "))}</span>
+    </div>
+    <p class="scout-hook">${escapeHtml(result.pitchHook)}</p>
+    ${result.piggyback ? `<span class="piggyback-badge">💡 Trip Piggyback Opportunity: ${escapeHtml(result.piggyback)}</span>` : ""}
+    ${duplicate ? `<p class="muted">Semantic match found: ${escapeHtml(duplicate.name)}. Directory insertion is blocked to prevent duplication.</p>` : `<button class="primary-button" type="button" data-add-scout-event="${escapeHtml(event.id)}">➕ Add to Active Directory</button>`}
+  </div>`;
 }
 
 function renderGapSegmentFilter(verticals) {
@@ -616,9 +1130,10 @@ function renderCalendar() {
     <div class="calendar-grid">${cells.join("")}</div>
   `;
   $$("[data-calendar-event]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       selectedConferenceId = button.dataset.calendarEvent;
-      document.querySelector("[data-view='conferences']").click();
       openConferenceDetail(selectedConferenceId);
     });
   });

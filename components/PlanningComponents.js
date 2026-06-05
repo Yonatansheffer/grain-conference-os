@@ -39,5 +39,5 @@ function renderClusterEvent(event) {
 function clusterWindowDays(events) {
   const times = events.map((event) => new Date(event.startDate).getTime()).sort((a, b) => a - b);
   if (times.length < 2) return 1;
-  return Math.round((times[times.length - 1] - times[0]) / 86400000) + 1;
+  return Math.max(1, Math.ceil((times[times.length - 1] - times[0]) / 86400000));
 }

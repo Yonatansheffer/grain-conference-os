@@ -91,6 +91,25 @@
         </section>
 
         <section id="planning" class="view">
+          <div id="pipelineGapAlert" class="pipeline-gap-alert" aria-live="polite"></div>
+          <div id="pipelineScout" class="panel scout-panel">
+            <div class="scout-head">
+              <div>
+                <span class="eyebrow">Proactive AI Pipeline Scout</span>
+                <h3>Find coverage-filling conferences</h3>
+              </div>
+              <span id="scoutModeBadge" class="status-badge status-muted">Local scout ready</span>
+            </div>
+            <div class="scout-search-wrap">
+              <input id="scoutPrompt" type="search" placeholder="Ask for events by vertical, region, timing, buyer density, or trip fit">
+              <button id="scoutMic" class="icon-button" type="button" aria-label="Voice prompt" title="Voice prompt">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>
+              </button>
+              <button id="runScoutSearch" class="primary-button" type="button">Run AI Scout</button>
+            </div>
+            <div id="scoutStatus" class="muted"></div>
+            <div id="scoutResults" class="scout-results"></div>
+          </div>
           <div class="planning-grid">
             <div class="panel">
               <div class="panel-head">
@@ -118,7 +137,7 @@
                   <label>
                     Time window
                     <div class="inline-input">
-                      <input id="clusterWindow" type="number" min="1" max="90" step="1" value="30">
+                      <input id="clusterWindow" type="number" min="1" max="90" step="1" value="10">
                       <span>days</span>
                     </div>
                   </label>
