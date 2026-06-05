@@ -6,7 +6,7 @@ let opportunityFilter = null;
 let sortState = { key: "score", direction: "desc" };
 let calendarDate = new Date("2026-06-01T00:00:00");
 let clusterConfig = { regions: [], windowDays: 10 };
-let visibleGapSegments = allVerticals();
+let visibleGapSegments = ["Fintech", "Payments", "Treasury"];
 let scoutState = { gap: null, results: [], loading: false, resolvedGapKey: "" };
 let speechRecognition = null;
 let isRecordingScribble = false;
@@ -100,7 +100,8 @@ function tierFor(score) {
 }
 
 function allVerticals() {
-  return [...new Set((state?.conferences || []).flatMap((conference) => conference.verticals || []))].sort();
+  const strategicVerticals = ["Payments", "Fintech", "Treasury", "Travel", "Wholesalers", "Banking", "SaaS", "Travel Tech", "Corporate Travel", "Airlines"];
+  return [...new Set([...(state?.conferences || []).flatMap((conference) => conference.verticals || []), ...strategicVerticals])].sort();
 }
 
 function activeConferenceStatuses() {
@@ -330,11 +331,16 @@ function renderActiveFilterChips() {
   const container = $("#activeFilterChips");
   if (!container) return;
   const labels = { vertical: "Vertical", region: "Region", status: "Status" };
+  const query = $("#searchInput")?.value.trim();
   const chips = Object.entries(filterState).flatMap(([key, values]) =>
     values.map((value) => ({ key, value, label: labels[key] || key }))
   );
-  container.innerHTML = chips.length
-    ? chips.map(({ key, value, label }) => renderFilterChip(key, value, label)).join("")
+  const hasActiveFilters = chips.length > 0 || Boolean(query) || Boolean(opportunityFilter);
+  container.innerHTML = hasActiveFilters
+    ? `${chips.map(({ key, value, label }) => renderFilterChip(key, value, label)).join("")}
+      ${query ? `<span class="filter-chip search-filter-chip"><span>Search: ${escapeHtml(query)}</span></span>` : ""}
+      ${opportunityFilter ? `<span class="filter-chip search-filter-chip"><span>Opportunity: ${escapeHtml(opportunityFilter.vertical)}</span></span>` : ""}
+      <button class="clear-all-filters" type="button" data-clear-all-filters>Clear All Filters</button>`
     : "";
   container.querySelectorAll("[data-filter-chip]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -345,6 +351,16 @@ function renderActiveFilterChips() {
       renderConferenceRows();
     });
   });
+  container.querySelector("[data-clear-all-filters]")?.addEventListener("click", clearAllConferenceFilters);
+}
+
+function clearAllConferenceFilters() {
+  filterState = { vertical: [], region: [], status: [] };
+  opportunityFilter = null;
+  sortState = { key: "score", direction: "desc" };
+  if ($("#searchInput")) $("#searchInput").value = "";
+  renderFilters();
+  renderConferenceRows();
 }
 
 function setupFilterControls() {
@@ -936,7 +952,6 @@ function renderPlanning() {
     });
 
     const verticals = allVerticals();
-    if (!visibleGapSegments.length) visibleGapSegments = [...verticals];
     renderGapSegmentFilter(verticals);
     $("#gaps").innerHTML = verticals
       .filter((vertical) => visibleGapSegments.includes(vertical))
@@ -1884,6 +1899,7 @@ function setup() {
   setupSettings();
   $("#searchInput").addEventListener("input", () => {
     opportunityFilter = null;
+    renderActiveFilterChips();
     renderConferenceRows();
   });
   $("#exportCsv").addEventListener("click", exportCsv);

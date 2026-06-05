@@ -608,6 +608,21 @@ textarea {
   background: #d7e8ed;
 }
 
+.clear-all-filters {
+  min-height: 30px;
+  border: 1px solid #f0c6be;
+  border-radius: 999px;
+  padding: 0 11px;
+  background: #fff5f2;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.clear-all-filters:hover {
+  background: var(--red-2);
+}
+
 .primary-button,
 .ghost-button {
   border-radius: 8px;
@@ -881,7 +896,7 @@ tbody tr:hover {
   justify-content: space-between;
   align-items: center;
   gap: 18px;
-  margin-bottom: 16px;
+  margin: 0 0 14px;
   padding: 16px;
   border: 1px solid #f2c273;
   border-radius: 8px;
@@ -908,6 +923,8 @@ tbody tr:hover {
 .scout-panel {
   display: grid;
   gap: 12px;
+  margin-top: 16px;
+  margin-bottom: 0;
   background: #fffdf8;
 }
 
@@ -1324,22 +1341,32 @@ tbody tr:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  min-height: 0;
 }
 
 .settings-grid {
-  align-items: stretch;
+  align-items: start;
 }
 
-.ai-settings-card,
-.hubspot-settings-card {
-  padding-bottom: 118px;
+.settings-config {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 218px;
 }
 
 .settings-fields {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
+}
+
+.settings-card > .muted,
+.settings-config > .muted {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .settings-card-head {
@@ -1371,18 +1398,22 @@ tbody tr:hover {
 }
 
 .sync-block {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 18px;
-  display: grid;
-  gap: 8px;
-  padding-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
 .sync-block button {
   justify-self: start;
+}
+
+.sync-block #hubspotResult {
+  flex-basis: 100%;
 }
 
 .scoring-panel {
@@ -1458,9 +1489,10 @@ tbody tr:hover {
   text-align: right;
 }
 
-.settings-card > .primary-button {
-  margin-top: auto;
+.settings-save-button {
+  margin-top: 0;
   justify-self: start;
+  align-self: flex-start;
 }
 
 .cluster-panel-head,
