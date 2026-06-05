@@ -1,49 +1,3 @@
-const STORAGE_KEY = "grain-conference-os";
-const SIDEBAR_KEY = "grain-conference-sidebar";
-const SIDEBAR_MIN = 220;
-const SIDEBAR_MAX = 380;
-const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist"];
-const TEAM_OPTIONS = ["Maya", "Noah", "Lior", "Dana", "Alex"];
-const DEFAULT_SCORE_WEIGHTS = {
-  buyerDensity: 20,
-  pspRelevance: 18,
-  fxRelevance: 20,
-  travelRelevance: 12,
-  seniority: 14,
-  audienceReach: 10,
-  costPenalty: 8
-};
-const SCORE_WEIGHT_LABELS = {
-  buyerDensity: "Buyer density",
-  pspRelevance: "PSP/payment fit",
-  fxRelevance: "FX exposure",
-  travelRelevance: "Travel relevance",
-  seniority: "Decision-maker seniority",
-  audienceReach: "Audience reach",
-  costPenalty: "Travel cost penalty"
-};
-const CONFIRMED_STATUSES = ["Committed", "Approved", "Confirmed"];
-const PAGE_TITLES = {
-  conferences: "Conferences",
-  planning: "Planning",
-  capture: "Capture",
-  relationships: "Relationships",
-  settings: "Settings"
-};
-const PAGE_DESCRIPTIONS = {
-  conferences: "Prioritize events by ICP fit, coverage needs, and expected pipeline value.",
-  planning: "Track the event calendar, spot coverage gaps, and tune trip-cluster rules.",
-  capture: "Log high-signal conversations quickly while reps are on the conference floor.",
-  relationships: "Review repeat contacts, relationship arcs, and recommended next steps.",
-  settings: "Configure ICP scoring weights, optional AI assistance, and HubSpot export or sync settings."
-};
-const METRIC_ICONS = {
-  Events: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4M16 2v4M4 9h16M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></svg>`,
-  "Tier A targets": `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.2 1 6-5.4-2.9-5.4 2.9 1-6-4.4-4.2 6.1-.9Z"/></svg>`,
-  Committed: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg>`,
-  Reach: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM2 12h20M12 2a12 12 0 0 1 0 20M12 2a12 12 0 0 0 0 20"/></svg>`
-};
-
 const state = migrateState(loadState());
 let selectedConferenceId = state.conferences[0]?.id;
 let filterState = { vertical: [], region: [], status: [] };
@@ -54,12 +8,15 @@ let clusterConfig = { regions: [], windowDays: 30 };
 let speechRecognition = null;
 let isRecordingScribble = false;
 
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => Array.from(document.querySelectorAll(selector));
-
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) return JSON.parse(saved);
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (error) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
   return {
     conferences: clone(CONFERENCES),
     leads: clone(LEADS),
@@ -70,33 +27,21 @@ function loadState() {
 }
 
 function migrateState(loaded) {
+  loaded = loaded || {};
   loaded.ai = loaded.ai || { key: "", model: "gpt-4o-mini" };
   loaded.hubspot = loaded.hubspot || { token: "" };
   loaded.scoringWeights = { ...DEFAULT_SCORE_WEIGHTS, ...(loaded.scoringWeights || {}) };
-  loaded.conferences = loaded.conferences.map((conference) => {
+  loaded.conferences = (Array.isArray(loaded.conferences) ? loaded.conferences : clone(CONFERENCES)).map((conference) => {
     if (Array.isArray(conference.team)) return conference;
     const team = conference.owner && conference.owner !== "Unassigned" ? [conference.owner] : [];
     return { ...conference, team };
   });
+  loaded.leads = Array.isArray(loaded.leads) ? loaded.leads : clone(LEADS);
   return loaded;
-}
-
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
 }
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function formatDateRange(item) {
-  const start = new Date(item.startDate + "T00:00:00");
-  const end = new Date(item.endDate + "T00:00:00");
-  const opts = { month: "short", day: "numeric" };
-  if (start.getMonth() === end.getMonth()) {
-    return `${start.toLocaleDateString("en-US", opts)}-${end.getDate()}, ${end.getFullYear()}`;
-  }
-  return `${start.toLocaleDateString("en-US", opts)}-${end.toLocaleDateString("en-US", opts)}, ${end.getFullYear()}`;
 }
 
 function scoreConference(c) {
@@ -120,47 +65,6 @@ function tierFor(score) {
   return "C";
 }
 
-function normalize(text) {
-  return (text || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "");
-}
-
-function initials(lead) {
-  return `${(lead.firstName || "")[0] || ""}${(lead.lastName || "")[0] || ""}`.toLowerCase();
-}
-
-function similarity(a, b) {
-  a = normalize(a);
-  b = normalize(b);
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  if (a.includes(b) || b.includes(a)) return 0.82;
-  const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-  for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,
-        matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
-      );
-    }
-  }
-  return 1 - matrix[a.length][b.length] / Math.max(a.length, b.length);
-}
-
-function leadMatchScore(a, b) {
-  const emailMatch = a.email && b.email && normalize(a.email) === normalize(b.email) ? 1 : 0;
-  const companyMatch = similarity(a.company, b.company);
-  const nameMatch = Math.max(
-    similarity(`${a.firstName} ${a.lastName}`, `${b.firstName} ${b.lastName}`),
-    initials(a) && initials(a) === initials(b) ? 0.72 : 0
-  );
-  return Math.max(emailMatch, nameMatch * 0.62 + companyMatch * 0.38);
-}
 
 function relationshipGroups() {
   const groups = [];
@@ -282,7 +186,7 @@ function renderClusterRegionFilter(regions) {
   button.textContent = clusterConfig.regions.length ? `${clusterConfig.regions.length} regions` : "All regions";
   menu.innerHTML = [
     `<button class="filter-clear" type="button" data-filter-clear="clusterRegion">Clear regions</button>`,
-    ...regions.map((region) => `<label class="multi-option"><input type="checkbox" value="${region}" ${clusterConfig.regions.includes(region) ? "checked" : ""}> <span>${region}</span></label>`)
+    ...regions.map((region) => renderMultiOption(region, clusterConfig.regions.includes(region)))
   ].join("");
   menu.querySelectorAll("input").forEach((input) => {
     input.addEventListener("change", () => {
@@ -306,7 +210,7 @@ function renderMultiFilter(key, options, pluralLabel) {
   button.textContent = selected.length ? `${selected.length} ${pluralLabel}` : `All ${pluralLabel}`;
   menu.innerHTML = [
     `<button class="filter-clear" type="button" data-filter-clear="${key}">Clear ${key}</button>`,
-    ...options.map((option) => `<label class="multi-option"><input type="checkbox" value="${option}" ${selected.includes(option) ? "checked" : ""}> <span>${option}</span></label>`)
+    ...options.map((option) => renderMultiOption(option, selected.includes(option)))
   ].join("");
   menu.querySelectorAll("input").forEach((input) => {
     input.addEventListener("change", () => {
@@ -332,7 +236,7 @@ function renderActiveFilterChips() {
     values.map((value) => ({ key, value, label: labels[key] || key }))
   );
   container.innerHTML = chips.length
-    ? chips.map(({ key, value, label }) => `<span class="filter-chip"><span>${label}: ${value}</span><button type="button" data-filter-chip="${key}" data-filter-value="${value}" aria-label="Clear ${label} ${value}">x</button></span>`).join("")
+    ? chips.map(({ key, value, label }) => renderFilterChip(key, value, label)).join("")
     : "";
   container.querySelectorAll("[data-filter-chip]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -449,12 +353,7 @@ function renderMetrics(items) {
     ["Committed", committed.length],
     ["Reach", audience.toLocaleString()]
   ]
-    .map(([label, value]) => `<div class="metric">
-      <span class="metric-icon">${METRIC_ICONS[label]}</span>
-      <strong>${value}</strong>
-      <span>${label}</span>
-      ${label === "Reach" ? `<small>From approved attendance only</small>` : ""}
-    </div>`)
+    .map(([label, value]) => renderMetricCard(label, value))
     .join("");
 }
 
@@ -466,16 +365,7 @@ function renderConferenceRows() {
     .map((c) => {
       const score = scoreConference(c);
       const tier = tierFor(score);
-      return `<tr data-id="${c.id}">
-        <td><strong>${c.name}</strong></td>
-        <td>${formatDateRange(c)}</td>
-        <td><strong>${c.region}</strong><br><span class="muted">${c.city}, ${c.country}</span></td>
-        <td><div class="vertical-pill-group">${c.verticals.map((v) => `<span class="vertical-pill">${v}</span>`).join("")}</div></td>
-        <td>${c.audience.toLocaleString()}</td>
-        <td><div class="score"><strong>${score} <span class="pill tier-${tier.toLowerCase()}">Tier ${tier}</span></strong><div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div></div></td>
-        <td>${renderTeamSelect(c)}</td>
-        <td>${renderStatusSelect(c)}</td>
-      </tr>`;
+      return renderConferenceRow(c, score, tier);
     })
     .join("");
   $$("#conferenceRows tr").forEach((row) => {
@@ -512,22 +402,6 @@ function renderSortButtons() {
   });
 }
 
-function renderStatusSelect(c) {
-  return `<select class="table-select status-select" data-edit="status" data-id="${c.id}" aria-label="Status for ${c.name}">
-    ${STATUS_OPTIONS.map((status) => `<option value="${status}" ${c.status === status ? "selected" : ""}>${status}</option>`).join("")}
-  </select>`;
-}
-
-function renderTeamSelect(c) {
-  const team = Array.isArray(c.team) ? c.team : [];
-  return `<div class="team-editor" data-id="${c.id}">
-    <button class="table-select team-button" type="button" aria-label="Team for ${c.name}">${teamLabel(c)}</button>
-    <div class="team-menu">
-      ${TEAM_OPTIONS.map((person) => `<label class="multi-option"><input type="checkbox" value="${person}" ${team.includes(person) ? "checked" : ""}> <span>${person}</span></label>`).join("")}
-    </div>
-  </div>`;
-}
-
 function handleTableEdit(event) {
   const conference = state.conferences.find((c) => c.id === event.currentTarget.dataset.id);
   if (!conference) return;
@@ -542,10 +416,6 @@ function handleTeamEdit(editor) {
   conference.team = Array.from(editor.querySelectorAll("input:checked")).map((input) => input.value);
   saveState();
   renderAll();
-}
-
-function teamLabel(c) {
-  return Array.isArray(c.team) && c.team.length ? c.team.join(", ") : "Unassigned";
 }
 
 function openConferenceDetail(id) {
@@ -617,7 +487,6 @@ function renderPlanning() {
       button.addEventListener("click", () => viewSegmentOpportunities(button.dataset.gapOpportunities));
     });
   } catch (error) {
-    console.error("Planning render failed", error);
     $("#eventCalendar").innerHTML = `<div class="empty-state"><strong>Planning could not load.</strong><span>Reset demo data or refresh the page to rebuild the event calendar.</span></div>`;
     $("#clusters").innerHTML = "";
     $("#gaps").innerHTML = "";
@@ -702,53 +571,6 @@ function renderCalendar() {
   });
 }
 
-function renderCalendarEvent(event) {
-  const team = teamLabel(event);
-  return `<button class="calendar-event tier-${tierFor(scoreConference(event)).toLowerCase()}" type="button" aria-label="${escapeHtml(event.name)} details" data-calendar-event="${event.id}">
-    <span>${escapeHtml(event.name)}</span>
-    <span class="calendar-tooltip" role="tooltip">
-      <strong>${escapeHtml(event.name)}</strong>
-      <span>${escapeHtml(event.city)}, ${escapeHtml(event.country)}</span>
-      <span>Team: ${escapeHtml(team)}</span>
-    </span>
-  </button>`;
-}
-
-function renderTripCluster(cluster) {
-  const committedCount = cluster.events.filter((event) => event.status === "Committed").length;
-  const pendingEvents = cluster.events.filter((event) => event.status !== "Committed");
-  const potential = cluster.events.reduce((sum, event) => sum + scoreConference(event), 0);
-  const windowDays = clusterWindowDays(cluster.events);
-  return `<div class="cluster trip-cluster">
-    <div class="cluster-head">
-      <strong>${escapeHtml(cluster.city || cluster.region)} cluster</strong>
-      <span>${committedCount}/${cluster.events.length} committed</span>
-    </div>
-    <div class="cluster-efficiency">
-      <span>${cluster.events.length} Events in a ${Math.max(windowDays, 1)}-day window</span>
-      <span>Combined ICP Potential ${potential}</span>
-    </div>
-    <div class="cluster-events">
-      ${cluster.events.map(renderClusterEvent).join("")}
-    </div>
-    ${pendingEvents.length ? `<div class="cluster-actions">${pendingEvents.map((event) => `<button class="add-trip-button" type="button" data-add-to-trip="${event.id}">Add to Trip: ${escapeHtml(event.name)}</button>`).join("")}</div>` : ""}
-  </div>`;
-}
-
-function renderClusterEvent(event) {
-  const committed = event.status === "Committed";
-  return `<span class="cluster-event ${committed ? "cluster-event-committed" : "cluster-event-pending"}">
-    <span>${escapeHtml(event.name)}</span>
-    <small>${escapeHtml(formatDateRange(event))} | ${escapeHtml(event.city)}</small>
-  </span>`;
-}
-
-function clusterWindowDays(events) {
-  const times = events.map((event) => new Date(event.startDate).getTime()).sort((a, b) => a - b);
-  if (times.length < 2) return 1;
-  return Math.round((times[times.length - 1] - times[0]) / 86400000) + 1;
-}
-
 function addEventToTrip(id) {
   const conference = state.conferences.find((event) => event.id === id);
   if (!conference || conference.status === "Committed") return;
@@ -776,7 +598,7 @@ function findClusters() {
 function renderRelationships() {
   const groups = relationshipGroups();
   $("#relationshipList").innerHTML = groups.length
-    ? groups.map(renderRelationship).join("")
+    ? groups.map(renderRelationshipCard).join("")
     : "<div class='panel'><p class='muted'>No repeat contacts yet. Capture a lead and this view will update automatically.</p></div>";
   $$("[data-next-step]").forEach((button) => {
     button.addEventListener("click", () => handleNextStep(button.dataset.nextStep, button.dataset.group, button));
@@ -784,33 +606,6 @@ function renderRelationships() {
   $$("[data-copy-context]").forEach((button) => {
     button.addEventListener("click", () => copyRelationshipContext(button.dataset.copyContext));
   });
-}
-
-function renderRelationship(group) {
-  const latest = group[group.length - 1];
-  const conferences = group.map((lead) => state.conferences.find((c) => c.id === lead.conferenceId)?.name || "Unknown");
-  const encodedId = encodeURIComponent(group.map((lead) => lead.id).join(","));
-  return `<div class="relationship">
-    <div>
-      <div class="relationship-title">
-        <strong>${latest.firstName} ${latest.lastName} at ${latest.company}</strong>
-        <button class="copy-context-button" type="button" title="Copy relationship context" aria-label="Copy relationship context" data-copy-context="${encodedId}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h10v12H8z"/><path d="M6 16H4V4h12v2"/></svg>
-        </button>
-      </div>
-      <p class="relationship-summary">${relationshipVerdict(group)}</p>
-      <p class="muted">${group.length} encounters: ${conferences.join(" -> ")}</p>
-      <p class="muted">${group.map((l) => `${l.title || "Unknown title"}: ${l.notes}`).join(" ")}</p>
-      <div class="lead-enrichment" aria-live="polite"></div>
-    </div>
-    <div class="actions">
-      <span class="pill ${latest.sentiment === "Strong" ? "tier-a" : "tier-b"}">${latest.sentiment}</span>
-      <div class="next-steps">
-        <span class="muted">Next steps</span>
-        ${relationshipNextSteps(group).map((step) => `<button class="ghost-button action-${step.action}" type="button" data-next-step="${step.action}" data-group="${encodedId}">${step.label}</button>`).join("")}
-      </div>
-    </div>
-  </div>`;
 }
 
 function relationshipNextSteps(group) {
@@ -882,12 +677,10 @@ async function parseFloorScribble() {
   try {
     parsed = state.ai.key ? await parseScribbleWithAi(raw) : parseScribbleLocally(raw);
   } catch (error) {
-    console.warn("AI parse failed, using local parser", error);
     parsed = parseScribbleLocally(raw);
     $("#scribbleStatus").textContent = "AI unavailable. Local draft ready.";
   }
   applyParsedLead(parsed, raw);
-  revealLeadForm();
   renderMatchPreview();
   $("#scribbleStatus").textContent = state.ai.key ? "AI draft ready." : "Local draft ready.";
 }
@@ -937,19 +730,6 @@ function parseScribbleLocally(raw) {
   return { firstName, lastName, company, title, email, phone, conferenceId: conference.id, vertical, urgency, sentiment, painPoints, nextStep, notes: "" };
 }
 
-function extractAfter(text, regex) {
-  const match = text.match(regex);
-  return match?.[1]?.trim().replace(/\s+/g, " ") || "";
-}
-
-function titleCase(text) {
-  return String(text || "").replace(/\w\S*/g, (word) => {
-    if (/^(VP|CFO|CEO|CTO|COO|PSP|FX)$/i.test(word)) return word.toUpperCase();
-    if (/^saas$/i.test(word)) return "SaaS";
-    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-  });
-}
-
 function inferVertical(text) {
   if (/travel|airline|hotel|corridor|wholesaler/i.test(text)) return "Travel";
   if (/payment|psp|merchant|settlement|payout/i.test(text)) return "Payments";
@@ -992,14 +772,6 @@ function findConferenceFromText(text) {
     const compactName = name.replace(/20/g, "2020");
     return normalizedText.includes(name) || normalizedText.includes(compactName) || normalizedText.includes(normalize(c.city));
   });
-}
-
-function revealLeadForm() {
-  $("#leadForm")?.classList.remove("review-hidden");
-}
-
-function hideLeadForm() {
-  $("#leadForm")?.classList.remove("review-hidden");
 }
 
 function toggleScribbleRecording() {
@@ -1124,10 +896,6 @@ function openDemoCalendarEvent(group) {
   window.open(url.toString(), "_blank", "noopener,noreferrer");
 }
 
-function formatCalendarDate(date) {
-  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-}
-
 function openLinkedInSearch(group) {
   const latest = group[group.length - 1];
   const conference = state.conferences.find((c) => c.id === latest.conferenceId);
@@ -1154,7 +922,6 @@ async function enrichLeadData(group, button) {
     const summary = state.ai.key ? await enrichLeadWithAi(latest, group) : localCompanyBrief(latest, group);
     target.innerHTML = `<strong>Company brief</strong><span>${escapeHtml(summary)}</span>`;
   } catch (error) {
-    console.warn("Lead enrichment failed", error);
     target.innerHTML = `<strong>Company brief</strong><span>${escapeHtml(localCompanyBrief(latest, group))}</span>`;
   } finally {
     button.disabled = false;
@@ -1192,20 +959,6 @@ async function enrichLeadWithAi(lead, group) {
 function localCompanyBrief(lead, group) {
   const domain = domainFromLead(lead);
   return `${lead.company}${domain ? ` (${domain})` : ""} appears in this relationship as a ${lead.vertical.toLowerCase()} account with ${group.length} conference touchpoints. Qualify current FX exposure, decision owner, and whether the next conversation should include finance or treasury leadership.`;
-}
-
-function domainFromLead(lead) {
-  return lead.email?.split("@")[1]?.toLowerCase() || "";
-}
-
-function escapeHtml(value) {
-  return String(value || "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
-  })[char]);
 }
 
 function buildRelationshipContext(group) {
@@ -1264,7 +1017,7 @@ async function generateAiSummaries() {
     });
     if (!response.ok) throw new Error(await response.text());
     const data = await response.json();
-    $("#relationshipList").innerHTML = `<div class="panel"><h3>AI relationship briefing</h3><p>${data.choices[0].message.content.replace(/\n/g, "<br>")}</p></div>` + groups.map(renderRelationship).join("");
+    $("#relationshipList").innerHTML = `<div class="panel"><h3>AI relationship briefing</h3><p>${data.choices[0].message.content.replace(/\n/g, "<br>")}</p></div>` + groups.map(renderRelationshipCard).join("");
   } catch (error) {
     $("#relationshipList").innerHTML = `<div class="panel"><p class="heat">AI request failed. Check the key/model, then try again.</p><p class="muted">${error.message}</p></div>`;
   }

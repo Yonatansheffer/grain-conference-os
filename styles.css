@@ -1447,10 +1447,6 @@ tbody tr:hover {
   border-color: #ffc2b6;
 }
 
-.review-hidden {
-  display: none;
-}
-
 .capture-main {
   padding: 18px;
   display: grid;
