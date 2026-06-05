@@ -937,9 +937,6 @@ function scoreNarrative(c) {
 
 function renderPlanning() {
   try {
-    scoutState.gap = analyzePipelineGap();
-    renderPipelineGapAlert();
-    renderScoutWorkspace();
     $("#coverageSummary").textContent = `${state.conferences.filter((c) => c.status === "Committed").length} committed events`;
     renderCalendar();
 
@@ -949,6 +946,9 @@ function renderPlanning() {
       : "<p class='muted'>No clusters found.</p>";
     $$("[data-add-to-trip]").forEach((button) => {
       button.addEventListener("click", () => addEventToTrip(button.dataset.addToTrip));
+    });
+    $$("[data-fill-trip-gap]").forEach((button) => {
+      button.addEventListener("click", () => fillTripGapViaScout(button));
     });
 
     const verticals = allVerticals();
@@ -960,48 +960,15 @@ function renderPlanning() {
     $$("[data-gap-opportunities]").forEach((button) => {
       button.addEventListener("click", () => viewSegmentOpportunities(button.dataset.gapOpportunities));
     });
+    $$("[data-gap-scout]").forEach((button) => {
+      button.addEventListener("click", () => resolveSegmentGapViaScout(button.dataset.gapScout));
+    });
   } catch (error) {
-    $("#pipelineGapAlert").innerHTML = "";
     $("#scoutResults").innerHTML = "";
     $("#eventCalendar").innerHTML = `<div class="empty-state"><strong>Planning could not load.</strong><span>Reset demo data or refresh the page to rebuild the event calendar.</span></div>`;
     $("#clusters").innerHTML = "";
     $("#gaps").innerHTML = "";
   }
-}
-
-function renderPipelineGapAlert() {
-  const container = $("#pipelineGapAlert");
-  if (!container) return;
-  const gap = scoutState.gap;
-  if (!gap) {
-    container.innerHTML = "";
-    return;
-  }
-  container.innerHTML = `<div class="gap-alert-card">
-    <div>
-      <span class="eyebrow">AI Gap Alert</span>
-      <h3>⚠️ AI Gap Alert: Under-invested Vertical</h3>
-      <p>We currently have ${gap.coverage}% sales team coverage in the ${escapeHtml(gap.vertical)} vertical for ${escapeHtml(gap.quarter)}. This creates a critical pipeline gap for our enterprise FX hedging product.</p>
-    </div>
-    <button class="primary-button" type="button" data-resolve-gap>🪄 Resolve Gap via AI Scout</button>
-  </div>`;
-  container.querySelector("[data-resolve-gap]")?.addEventListener("click", resolveGapViaScout);
-}
-
-function resolveGapViaScout() {
-  const prompt = scoutPromptForGap(scoutState.gap);
-  $("#scoutPrompt").value = prompt;
-  $("#pipelineScout")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  setTimeout(() => $("#scoutPrompt")?.focus(), 350);
-}
-
-function scoutPromptForGap(gap) {
-  if (!gap) return "";
-  if (/travel/i.test(gap.vertical) && /Q3 2026/i.test(gap.quarter)) {
-    return "Find leading corporate travel wholesale and international fintech conferences in Europe or North America taking place between July and September 2026 with a high density of CFOs and finance leaders.";
-  }
-  const range = quarterDateRange(gap.quarter);
-  return `Find leading ${gap.vertical} conferences in Europe or North America taking place between ${range.start} and ${range.end} with a high density of CFOs, treasurers, and finance leaders.`;
 }
 
 function renderScoutWorkspace() {
@@ -1011,6 +978,28 @@ function renderScoutWorkspace() {
     badge.className = `status-badge ${state.ai.key ? "status-active" : "status-muted"}`;
   }
   renderScoutResults();
+}
+
+function routePromptToScout(prompt) {
+  document.querySelector("[data-view='conferences']")?.click();
+  const input = $("#scoutPrompt");
+  if (input) input.value = prompt;
+  setTimeout(() => {
+    $("#pipelineScout")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    input?.focus();
+  }, 120);
+}
+
+function resolveSegmentGapViaScout(segmentName) {
+  const segment = segmentName || "target";
+  routePromptToScout(`Find leading high-ICP ${segment} conferences in Europe or North America for the upcoming 2026 and 2027 pipeline period, with dense CFO, treasurer, finance leader, PSP, payments, or enterprise buyer attendance relevant to Grain's FX hedging product.`);
+}
+
+function fillTripGapViaScout(button) {
+  const clusterRegion = button.dataset.clusterRegion || "the active trip region";
+  const gapStart = button.dataset.gapStart || "the open itinerary start date";
+  const gapEnd = button.dataset.gapEnd || "the open itinerary end date";
+  routePromptToScout(`Find target high-ICP fintech, payment, or corporate conferences taking place in ${clusterRegion} between ${gapStart} and ${gapEnd} to optimize an existing sales travel itinerary.`);
 }
 
 function renderScoutResults() {
@@ -1081,12 +1070,13 @@ function renderGapCard(vertical) {
   const avg = relevant.length ? Math.round(relevant.reduce((sum, c) => sum + scoreConference(c), 0) / relevant.length) : 0;
   const ratio = relevant.length ? committed.length / relevant.length : 0;
   const progress = Math.round(ratio * 100);
-  const gap = avg >= 68 && committed.length < 2;
+  const zeroCoverage = committed.length === 0 || progress === 0;
+  const gap = zeroCoverage || (avg >= 68 && committed.length < 2);
   const pending = relevant
     .filter((c) => c.status !== "Committed" && scoreConference(c) >= 68)
     .sort((a, b) => scoreConference(b) - scoreConference(a));
   const missedReach = pending.reduce((sum, c) => sum + c.audience, 0);
-  const tone = gap ? (progress === 0 ? "danger" : "warning") : "healthy";
+  const tone = gap ? (zeroCoverage ? "danger" : "warning") : "healthy";
   return `<div class="gap gap-${tone}">
     <div class="gap-head">
       <strong>${vertical}</strong>
@@ -1096,9 +1086,21 @@ function renderGapCard(vertical) {
       <span style="width:${Math.min(100, progress)}%"></span>
     </div>
     <p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}.</p>
-    <p class="${gap ? "heat" : "muted"}">${gap ? "Under-invested: add coverage or piggyback." : "Coverage looks proportional."}</p>
-    ${gap ? `<p class="muted gap-cost">Missing out on ${missedReach.toLocaleString()} potential reach across ${pending.length} pending events.</p>
+    <p class="${gap ? "heat" : "muted"}">${zeroCoverage ? "Under-invested: critical pipeline gap." : (gap ? "Under-invested: add coverage or piggyback." : "Coverage looks proportional.")}</p>
+    ${zeroCoverage ? renderSegmentGapAlert(vertical) : ""}
+    ${gap && !zeroCoverage ? `<p class="muted gap-cost">Missing out on ${missedReach.toLocaleString()} potential reach across ${pending.length} pending events.</p>
       <button class="gap-action" type="button" data-gap-opportunities="${vertical}">View Opportunities</button>` : ""}
+  </div>`;
+}
+
+function renderSegmentGapAlert(segmentName) {
+  return `<div class="gap-alert-card segment-gap-alert">
+    <div>
+      <span class="eyebrow">AI Gap Alert</span>
+      <h3>&#9888;&#65039; AI Gap Alert</h3>
+      <p>0 ${escapeHtml(segmentName)}-related events scheduled for the upcoming period. This creates a critical pipeline risk for our core enterprise ${escapeHtml(segmentName)} target audience.</p>
+    </div>
+    <button class="primary-button" type="button" data-gap-scout="${escapeHtml(segmentName)}">&#129668; Resolve Gap via AI Scout</button>
   </div>`;
 }
 
@@ -1880,6 +1882,7 @@ function saveScoringWeights() {
 
 function renderAll() {
   renderConferenceRows();
+  renderScoutWorkspace();
   renderPlanning();
   renderRelationships();
   renderWeightControls();

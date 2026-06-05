@@ -920,6 +920,18 @@ tbody tr:hover {
   flex: 0 0 auto;
 }
 
+.segment-gap-alert {
+  display: grid;
+  gap: 10px;
+  margin: 2px 0 0;
+  padding: 12px;
+  box-shadow: none;
+}
+
+.segment-gap-alert .primary-button {
+  justify-self: start;
+}
+
 .scout-panel {
   display: grid;
   gap: 12px;
@@ -1626,6 +1638,10 @@ tbody tr:hover {
 .add-trip-button:hover {
   color: var(--primary-dark);
   text-decoration: underline;
+}
+
+.trip-gap-scout-button {
+  color: var(--teal);
 }
 
 .gap {

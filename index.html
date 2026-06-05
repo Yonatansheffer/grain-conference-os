@@ -88,6 +88,24 @@
             <button id="exportConferencesCsv" class="primary-button" type="button">Export view CSV</button>
             <button id="addConferenceButton" class="primary-button" type="button">Add Conference</button>
           </div>
+          <div id="pipelineScout" class="panel scout-panel">
+            <div class="scout-head">
+              <div>
+                <span class="eyebrow">Proactive AI Pipeline Scout</span>
+                <h3>Find coverage-filling conferences</h3>
+              </div>
+              <span id="scoutModeBadge" class="status-badge status-muted">Local scout ready</span>
+            </div>
+            <div class="scout-search-wrap">
+              <input id="scoutPrompt" type="search" placeholder="Ask for events by vertical, region, timing, buyer density, or trip fit">
+              <button id="scoutMic" class="icon-button" type="button" aria-label="Voice prompt" title="Voice prompt">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>
+              </button>
+              <button id="runScoutSearch" class="primary-button" type="button">Run AI Scout</button>
+            </div>
+            <div id="scoutStatus" class="muted"></div>
+            <div id="scoutResults" class="scout-results"></div>
+          </div>
         </section>
 
         <section id="planning" class="view">
@@ -141,26 +159,7 @@
                 </div>
               </div>
             </div>
-            <div id="pipelineGapAlert" class="pipeline-gap-alert" aria-live="polite"></div>
             <div id="gaps" class="gap-grid"></div>
-          </div>
-          <div id="pipelineScout" class="panel scout-panel">
-            <div class="scout-head">
-              <div>
-                <span class="eyebrow">Proactive AI Pipeline Scout</span>
-                <h3>Find coverage-filling conferences</h3>
-              </div>
-              <span id="scoutModeBadge" class="status-badge status-muted">Local scout ready</span>
-            </div>
-            <div class="scout-search-wrap">
-              <input id="scoutPrompt" type="search" placeholder="Ask for events by vertical, region, timing, buyer density, or trip fit">
-              <button id="scoutMic" class="icon-button" type="button" aria-label="Voice prompt" title="Voice prompt">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>
-              </button>
-              <button id="runScoutSearch" class="primary-button" type="button">Run AI Scout</button>
-            </div>
-            <div id="scoutStatus" class="muted"></div>
-            <div id="scoutResults" class="scout-results"></div>
           </div>
         </section>
 
