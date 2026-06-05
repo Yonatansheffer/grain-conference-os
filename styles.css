@@ -1162,18 +1162,75 @@ tbody tr:hover {
   gap: 16px;
 }
 
+.settings-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto;
+  gap: 12px;
+}
+
+.settings-fields {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-height: 154px;
+}
+
+.settings-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.status-active {
+  background: var(--green-2);
+  color: var(--green);
+}
+
+.status-muted {
+  background: #eef1f2;
+  color: #65727c;
+}
+
+.sync-block {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.sync-block button {
+  justify-self: start;
+}
+
+.scoring-panel {
+  display: grid;
+  gap: 14px;
+}
+
 .weight-controls {
   display: grid;
-  gap: 10px;
-  margin: 16px 0 14px;
+  gap: 8px;
 }
 
 .weight-control {
   display: grid;
-  grid-template-columns: minmax(150px, 1.1fr) minmax(140px, 2fr) 72px 46px;
+  grid-template-columns: minmax(190px, 1fr) minmax(160px, 2fr) 76px 52px;
   gap: 10px;
   align-items: center;
-  padding: 10px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fffdf8;
@@ -1774,6 +1831,10 @@ tbody tr:hover {
 
   .qualification-grid label:last-child {
     grid-column: auto;
+  }
+
+  .settings-fields {
+    min-height: 0;
   }
 
   .weight-control strong {

@@ -267,31 +267,45 @@
 
         <section id="settings" class="view">
           <div class="settings-grid">
-            <div class="panel">
-              <h3>AI Assistant</h3>
+            <div class="panel settings-card">
+              <div class="settings-card-head">
+                <h3>AI Assistant</h3>
+                <span id="aiStatusBadge" class="status-badge status-muted">Local Heuristics</span>
+              </div>
               <p class="muted">Optional. Without a key, the app uses transparent local heuristics. With a key, it drafts relationship summaries and follow-ups from lead notes.</p>
-              <label>
-                OpenAI-compatible API key
-                <input id="aiKey" type="password" placeholder="Stored only in this browser">
-              </label>
-              <label>
-                Model
-                <input id="aiModel" value="gpt-4o-mini">
-              </label>
+              <div class="settings-fields">
+                <label>
+                  OpenAI-compatible API key
+                  <input id="aiKey" type="password" autocomplete="current-password" placeholder="Stored only in this browser">
+                </label>
+                <label>
+                  Model
+                  <input id="aiModel" value="gpt-4o-mini">
+                </label>
+              </div>
               <button id="saveAi" class="primary-button">Save AI settings</button>
             </div>
-            <div class="panel">
-              <h3>HubSpot Path</h3>
+            <div class="panel settings-card">
+              <div class="settings-card-head">
+                <h3>HubSpot Path</h3>
+                <span id="hubspotStatusBadge" class="status-badge status-muted">Disconnected</span>
+              </div>
               <p class="muted">For a static demo, CSV export is the safest path. Optional direct push uses a user-provided private app token in this browser.</p>
-              <label>
-                HubSpot private app token
-                <input id="hubspotToken" type="password" placeholder="Not hardcoded">
-              </label>
-              <button id="pushHubspot" class="primary-button">Push new leads to HubSpot</button>
-              <div id="hubspotResult" class="muted"></div>
+              <div class="settings-fields">
+                <label>
+                  HubSpot private app token
+                  <input id="hubspotToken" type="password" autocomplete="current-password" placeholder="Not hardcoded">
+                </label>
+              </div>
+              <button id="saveHubspot" class="primary-button">Save HubSpot settings</button>
+              <div class="sync-block">
+                <button id="pushHubspot" class="ghost-button" type="button">Push new leads to HubSpot</button>
+                <span id="hubspotLastSync" class="muted">Last successful sync: Never</span>
+                <div id="hubspotResult" class="muted"></div>
+              </div>
             </div>
           </div>
-          <div class="panel">
+          <div class="panel scoring-panel">
             <h3>Scoring Methodology</h3>
             <div id="weightControls" class="weight-controls"></div>
             <button id="saveWeights" class="primary-button">Save scoring weights</button>

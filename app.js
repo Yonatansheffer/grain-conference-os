@@ -1,4 +1,5 @@
 const state = migrateState(loadState());
+saveState();
 let selectedConferenceId = state.conferences[0]?.id;
 let filterState = { vertical: [], region: [], status: [] };
 let opportunityFilter = null;
@@ -29,8 +30,9 @@ function loadState() {
 function migrateState(loaded) {
   loaded = loaded || {};
   loaded.ai = loaded.ai || { key: "", model: "gpt-4o-mini" };
-  loaded.hubspot = loaded.hubspot || { token: "" };
-  loaded.scoringWeights = { ...DEFAULT_SCORE_WEIGHTS, ...(loaded.scoringWeights || {}) };
+  loaded.hubspot = loaded.hubspot || { token: "", lastSuccessfulSync: "" };
+  loaded.hubspot.lastSuccessfulSync = loaded.hubspot.lastSuccessfulSync || "";
+  loaded.scoringWeights = migrateScoringWeights(loaded.scoringWeights);
   loaded.conferences = (Array.isArray(loaded.conferences) ? loaded.conferences : clone(CONFERENCES)).map((conference) => {
     if (Array.isArray(conference.team)) return conference;
     const team = conference.owner && conference.owner !== "Unassigned" ? [conference.owner] : [];
@@ -40,23 +42,49 @@ function migrateState(loaded) {
   return loaded;
 }
 
+function migrateScoringWeights(savedWeights = {}) {
+  const hasNewWeights = Object.keys(DEFAULT_SCORE_WEIGHTS).some((key) => Object.prototype.hasOwnProperty.call(savedWeights, key));
+  if (hasNewWeights) {
+    return Object.fromEntries(
+      Object.keys(DEFAULT_SCORE_WEIGHTS).map((key) => [key, clampWeight(savedWeights[key] ?? DEFAULT_SCORE_WEIGHTS[key])])
+    );
+  }
+  if (Object.keys(savedWeights).length) {
+    return {
+      industryFit: clampWeight(((savedWeights.buyerDensity || 0) + (savedWeights.pspRelevance || 0) + (savedWeights.travelRelevance || 0)) * 1.5 || DEFAULT_SCORE_WEIGHTS.industryFit),
+      fxExposurePain: clampWeight((savedWeights.fxRelevance || 0) * 4 || DEFAULT_SCORE_WEIGHTS.fxExposurePain),
+      decisionMakerSeniority: clampWeight((savedWeights.seniority || 0) * 5 || DEFAULT_SCORE_WEIGHTS.decisionMakerSeniority),
+      audienceScale: clampWeight((savedWeights.audienceReach || 0) * 6 || DEFAULT_SCORE_WEIGHTS.audienceScale),
+      travelBudgetRoi: clampWeight(Math.max(0, 100 - (savedWeights.costPenalty || 0) * 6) || DEFAULT_SCORE_WEIGHTS.travelBudgetRoi)
+    };
+  }
+  return { ...DEFAULT_SCORE_WEIGHTS };
+}
+
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 function scoreConference(c) {
   const weights = { ...DEFAULT_SCORE_WEIGHTS, ...(state.scoringWeights || {}) };
-  const reach = Math.min(5, Math.log10(Math.max(c.audience, 100)) - 1);
-  const raw =
-    (c.buyerDensity / 5) * weights.buyerDensity +
-    (c.pspRelevance / 5) * weights.pspRelevance +
-    (c.fxRelevance / 5) * weights.fxRelevance +
-    (c.travelRelevance / 5) * weights.travelRelevance +
-    (c.seniority / 5) * weights.seniority +
-    (reach / 5) * weights.audienceReach -
-    (c.costTier / 5) * weights.costPenalty +
-    6;
-  return Math.max(0, Math.min(100, Math.round(raw)));
+  const totalWeight = Object.values(weights).reduce((sum, value) => sum + clampWeight(value), 0) || 1;
+  const reach = Math.min(1, Math.max(0, (Math.log10(Math.max(c.audience || 0, 100)) - 2) / 3));
+  const industryFit = ((c.buyerDensity || 0) / 5) * 0.45 + (Math.max(c.pspRelevance || 0, c.travelRelevance || 0) / 5) * 0.55;
+  const fxExposurePain = (c.fxRelevance || 0) / 5;
+  const decisionMakerSeniority = (c.seniority || 0) / 5;
+  const audienceScale = reach;
+  const travelBudgetRoi = ((6 - (c.costTier || 3)) / 5) * 0.65 + ((c.travelRelevance || 0) / 5) * 0.35;
+  const weightedScore =
+    industryFit * clampWeight(weights.industryFit) +
+    fxExposurePain * clampWeight(weights.fxExposurePain) +
+    decisionMakerSeniority * clampWeight(weights.decisionMakerSeniority) +
+    audienceScale * clampWeight(weights.audienceScale) +
+    travelBudgetRoi * clampWeight(weights.travelBudgetRoi);
+  return Math.max(0, Math.min(100, Math.round((weightedScore / totalWeight) * 100)));
+}
+
+function clampWeight(value) {
+  return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
 }
 
 function tierFor(score) {
@@ -1202,6 +1230,9 @@ async function pushHubspot() {
       });
       if (response.ok || response.status === 409) pushed += 1;
     }
+    state.hubspot.lastSuccessfulSync = new Date().toISOString();
+    saveState();
+    renderSettingsStatus();
     $("#hubspotResult").textContent = `${pushed} contacts pushed or already existed.`;
   } catch (error) {
     $("#hubspotResult").textContent = `HubSpot push failed: ${error.message}`;
@@ -1212,17 +1243,43 @@ function setupSettings() {
   $("#aiKey").value = state.ai.key || "";
   $("#aiModel").value = state.ai.model || "gpt-4o-mini";
   $("#hubspotToken").value = state.hubspot.token || "";
+  renderSettingsStatus();
   renderWeightControls();
   $("#saveAi").addEventListener("click", () => {
     state.ai.key = $("#aiKey").value.trim();
     state.ai.model = $("#aiModel").value.trim();
+    saveState();
+    renderSettingsStatus();
+    alert("AI settings saved in this browser.");
+  });
+  $("#saveHubspot").addEventListener("click", () => {
     state.hubspot.token = $("#hubspotToken").value.trim();
     saveState();
-    alert("Settings saved in this browser.");
+    renderSettingsStatus();
+    alert("HubSpot settings saved in this browser.");
   });
   $("#saveWeights").addEventListener("click", saveScoringWeights);
   $("#pushHubspot").addEventListener("click", pushHubspot);
   $("#aiSummaries").addEventListener("click", generateAiSummaries);
+}
+
+function renderSettingsStatus() {
+  const hasAiKey = Boolean(($("#aiKey")?.value || state.ai.key || "").trim());
+  const hasHubspotToken = Boolean(($("#hubspotToken")?.value || state.hubspot.token || "").trim());
+  const aiBadge = $("#aiStatusBadge");
+  const hubspotBadge = $("#hubspotStatusBadge");
+  if (aiBadge) {
+    aiBadge.textContent = hasAiKey ? "Active" : "Local Heuristics";
+    aiBadge.className = `status-badge ${hasAiKey ? "status-active" : "status-muted"}`;
+  }
+  if (hubspotBadge) {
+    hubspotBadge.textContent = hasHubspotToken ? "Active" : "Disconnected";
+    hubspotBadge.className = `status-badge ${hasHubspotToken ? "status-active" : "status-muted"}`;
+  }
+  const lastSync = state.hubspot.lastSuccessfulSync
+    ? new Date(state.hubspot.lastSuccessfulSync).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    : "Never";
+  if ($("#hubspotLastSync")) $("#hubspotLastSync").textContent = `Last successful sync: ${lastSync}`;
 }
 
 function renderWeightControls() {
@@ -1230,8 +1287,8 @@ function renderWeightControls() {
   $("#weightControls").innerHTML = Object.entries(SCORE_WEIGHT_LABELS)
     .map(([key, label]) => `<label class="weight-control">
       <span>${label}</span>
-      <input type="range" min="0" max="30" step="1" value="${weights[key]}" data-score-weight="${key}" aria-label="${label} weight">
-      <input type="number" min="0" max="30" step="1" value="${weights[key]}" data-score-weight-number="${key}" aria-label="${label} percentage">
+      <input type="range" min="0" max="100" step="1" value="${weights[key]}" data-score-weight="${key}" aria-label="${label} weight">
+      <input type="number" min="0" max="100" step="1" value="${weights[key]}" data-score-weight-number="${key}" aria-label="${label} percentage">
       <strong>${weights[key]}%</strong>
     </label>`)
     .join("");
@@ -1244,7 +1301,7 @@ function renderWeightControls() {
 }
 
 function syncWeightInput(key, value) {
-  const cleanValue = Math.max(0, Math.min(30, Math.round(Number(value) || 0)));
+  const cleanValue = clampWeight(value);
   const range = $(`[data-score-weight="${key}"]`);
   const number = $(`[data-score-weight-number="${key}"]`);
   const label = number?.nextElementSibling;
@@ -1257,7 +1314,7 @@ function saveScoringWeights() {
   state.scoringWeights = Object.fromEntries(
     Object.keys(DEFAULT_SCORE_WEIGHTS).map((key) => {
       const input = $(`[data-score-weight-number="${key}"]`);
-      return [key, Math.max(0, Math.min(30, Math.round(Number(input?.value) || 0)))];
+      return [key, clampWeight(input?.value)];
     })
   );
   saveState();

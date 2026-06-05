@@ -5,22 +5,18 @@ const SIDEBAR_MAX = 380;
 const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist"];
 const TEAM_OPTIONS = ["Maya", "Noah", "Lior", "Dana", "Alex"];
 const DEFAULT_SCORE_WEIGHTS = {
-  buyerDensity: 20,
-  pspRelevance: 18,
-  fxRelevance: 20,
-  travelRelevance: 12,
-  seniority: 14,
-  audienceReach: 10,
-  costPenalty: 8
+  industryFit: 80,
+  fxExposurePain: 85,
+  decisionMakerSeniority: 75,
+  audienceScale: 55,
+  travelBudgetRoi: 60
 };
 const SCORE_WEIGHT_LABELS = {
-  buyerDensity: "Buyer density",
-  pspRelevance: "PSP/payment fit",
-  fxRelevance: "FX exposure",
-  travelRelevance: "Travel relevance",
-  seniority: "Decision-maker seniority",
-  audienceReach: "Audience reach",
-  costPenalty: "Travel cost penalty"
+  industryFit: "ICP Industry Fit",
+  fxExposurePain: "FX Exposure Pain",
+  decisionMakerSeniority: "Decision-Maker Seniority",
+  audienceScale: "Audience Scale",
+  travelBudgetRoi: "Travel & Budget ROI"
 };
 const CONFIRMED_STATUSES = ["Committed", "Approved", "Confirmed"];
 const PAGE_TITLES = {
