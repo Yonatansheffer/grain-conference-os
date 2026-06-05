@@ -365,7 +365,6 @@ button {
 .metric,
 .panel,
 .detail-panel,
-.capture-side,
 .capture-main {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -863,7 +862,6 @@ tbody tr:hover {
 
 .detail-panel h3,
 .panel h3,
-.capture-side h3,
 .relationship-top h3 {
   margin: 0;
 }
@@ -1233,13 +1231,15 @@ tbody tr:hover {
 .capture-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 14px;
   margin-bottom: 16px;
 }
 
 .floor-scribble {
   display: grid;
   gap: 14px;
+  margin-bottom: 0;
+  background: #fffdf8;
 }
 
 .scribble-head,
@@ -1257,11 +1257,11 @@ tbody tr:hover {
 }
 
 #scribbleInput {
-  min-height: 150px;
+  min-height: 132px;
   font-size: 16px;
   line-height: 1.5;
-  border-color: #bddfed;
-  background: #fafdff;
+  border-color: #d9cdbb;
+  background: #fffefa;
 }
 
 .scribble-actions {
@@ -1301,27 +1301,38 @@ tbody tr:hover {
   display: none;
 }
 
-.capture-main,
-.capture-side {
+.capture-main {
   padding: 18px;
   display: grid;
-  gap: 14px;
+  gap: 16px;
+  background: #fffdf8;
 }
 
-.ai-review-panel {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fdff 100%);
-  border-color: #cfe8ee;
+.form-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #eee1d0;
+  border-radius: 8px;
+  background: #ffffff;
 }
 
-.review-grid {
+.form-section-label {
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.qualification-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   align-items: end;
 }
 
-.review-grid label:last-child {
-  grid-column: span 2;
+.qualification-grid label:last-child {
+  grid-column: span 1;
 }
 
 .capture-actions {
@@ -1329,10 +1340,10 @@ tbody tr:hover {
   gap: 10px;
   justify-content: flex-end;
   flex-wrap: wrap;
+  padding-top: 2px;
 }
 
-.capture-actions .wide {
-  width: auto;
+.capture-actions button {
   min-width: 170px;
 }
 
@@ -1350,6 +1361,9 @@ tbody tr:hover {
 
 .segmented input {
   position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -1554,14 +1568,14 @@ tbody tr:hover {
   .settings-grid,
   .detail-grid,
   .capture-layout,
-  .review-grid,
+  .qualification-grid,
   .weight-control,
   .three-col,
   .score-input-grid {
     grid-template-columns: 1fr;
   }
 
-  .review-grid label:last-child {
+  .qualification-grid label:last-child {
     grid-column: auto;
   }
 
