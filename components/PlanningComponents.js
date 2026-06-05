@@ -20,10 +20,7 @@ function renderTripCluster(cluster) {
       <strong>${escapeHtml(cluster.city || cluster.region)} cluster</strong>
       <span>${committedCount}/${cluster.events.length} committed</span>
     </div>
-    <div class="cluster-efficiency">
-      <span>${cluster.events.length} Events in a ${Math.max(windowDays, 1)}-day window</span>
-      <span>Combined ICP Potential ${potential}</span>
-    </div>
+    <p class="cluster-efficiency">${cluster.events.length} Events in a ${Math.max(windowDays, 1)}-day window | Combined ICP Potential ${potential}</p>
     <div class="cluster-events">
       ${cluster.events.map(renderClusterEvent).join("")}
     </div>

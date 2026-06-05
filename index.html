@@ -91,6 +91,20 @@
         </section>
 
         <section id="planning" class="view">
+          <div class="planning-toolbar">
+            <div class="filter-control">
+              <span>Regions</span>
+              <button class="multi-filter-button" id="clusterRegionButton" type="button" data-filter-button="clusterRegion">All regions</button>
+              <div class="multi-filter-menu" id="clusterRegionFilter" data-filter="clusterRegion"></div>
+            </div>
+            <label>
+              Time window
+              <div class="inline-input">
+                <input id="clusterWindow" type="number" min="1" max="90" step="1" value="30">
+                <span>days</span>
+              </div>
+            </label>
+          </div>
           <div class="planning-grid">
             <div class="panel">
               <div class="panel-head">
@@ -105,27 +119,10 @@
             </div>
             <div class="panel">
               <div class="panel-head">
-                <h3>Cluster Configuration</h3>
+                <h3>Trip Clusters</h3>
                 <span id="coverageSummary"></span>
               </div>
-              <div class="cluster-config">
-                <div class="filter-control">
-                  <span>Regions</span>
-                  <button class="multi-filter-button" id="clusterRegionButton" type="button" data-filter-button="clusterRegion">All regions</button>
-                  <div class="multi-filter-menu" id="clusterRegionFilter" data-filter="clusterRegion"></div>
-                </div>
-                <label>
-                  Time window
-                  <div class="inline-input">
-                    <input id="clusterWindow" type="number" min="1" max="90" step="1" value="30">
-                    <span>days</span>
-                  </div>
-                </label>
-              </div>
-              <div class="panel-head compact-head">
-                <h3>Trip Clusters</h3>
-                <span id="clusterSummary">30-day window</span>
-              </div>
+              <span id="clusterSummary" class="cluster-window-label">30-day window</span>
               <div id="clusters" class="cluster-list"></div>
             </div>
           </div>
