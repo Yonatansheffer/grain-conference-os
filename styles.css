@@ -1131,14 +1131,6 @@ tbody tr:hover {
   font-weight: 850;
 }
 
-.cluster-window-label {
-  display: block;
-  margin: -8px 0 12px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
 .empty-state {
   display: grid;
   gap: 6px;
@@ -1163,16 +1155,25 @@ tbody tr:hover {
 }
 
 .settings-card {
-  display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+}
+
+.settings-grid {
+  align-items: stretch;
+}
+
+.ai-settings-card,
+.hubspot-settings-card {
+  padding-bottom: 118px;
 }
 
 .settings-fields {
   display: grid;
   gap: 12px;
   align-content: start;
-  min-height: 154px;
 }
 
 .settings-card-head {
@@ -1204,9 +1205,12 @@ tbody tr:hover {
 }
 
 .sync-block {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
   display: grid;
   gap: 8px;
-  margin-top: 4px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
@@ -1288,13 +1292,35 @@ tbody tr:hover {
   text-align: right;
 }
 
+.settings-card > .primary-button {
+  margin-top: auto;
+  justify-self: start;
+}
+
+.cluster-panel-head,
+.segments-panel-head {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.cluster-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.cluster-title-row h3 {
+  margin: 0;
+}
+
 .cluster-header-controls {
   display: flex;
   align-items: flex-end;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 10px;
   flex-wrap: wrap;
-  margin-left: auto;
 }
 
 .cluster-header-controls .filter-control {
@@ -1316,6 +1342,24 @@ tbody tr:hover {
 .cluster-header-controls #coverageSummary {
   align-self: center;
   white-space: nowrap;
+}
+
+.segments-filter-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.segments-filter-row .filter-control {
+  width: 240px;
+  max-width: 100%;
+  gap: 4px;
+}
+
+.segments-filter-row .multi-filter-button {
+  min-height: 36px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .cluster-efficiency {
@@ -1835,6 +1879,10 @@ tbody tr:hover {
 
   .settings-fields {
     min-height: 0;
+  }
+
+  .ai-settings-card {
+    padding-bottom: 18px;
   }
 
   .weight-control strong {

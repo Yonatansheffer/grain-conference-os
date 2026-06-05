@@ -6,6 +6,7 @@ let opportunityFilter = null;
 let sortState = { key: "score", direction: "desc" };
 let calendarDate = new Date("2026-06-01T00:00:00");
 let clusterConfig = { regions: [], windowDays: 30 };
+let visibleGapSegments = ["Payments", "Travel", "Fintech", "SaaS"];
 let speechRecognition = null;
 let isRecordingScribble = false;
 
@@ -499,7 +500,6 @@ function renderPlanning() {
     renderCalendar();
 
     const clusters = findClusters();
-    $("#clusterSummary").textContent = `${clusterConfig.windowDays}-day window`;
     $("#clusters").innerHTML = clusters.length
       ? clusters.map(renderTripCluster).join("")
       : "<p class='muted'>No clusters found.</p>";
@@ -508,7 +508,9 @@ function renderPlanning() {
     });
 
     const verticals = ["Payments", "Travel", "Fintech", "SaaS"];
+    renderGapSegmentFilter(verticals);
     $("#gaps").innerHTML = verticals
+      .filter((vertical) => visibleGapSegments.includes(vertical))
       .map(renderGapCard)
       .join("");
     $$("[data-gap-opportunities]").forEach((button) => {
@@ -519,6 +521,29 @@ function renderPlanning() {
     $("#clusters").innerHTML = "";
     $("#gaps").innerHTML = "";
   }
+}
+
+function renderGapSegmentFilter(verticals) {
+  const menu = $("#gapSegmentFilter");
+  const button = $("#gapSegmentButton");
+  if (!menu || !button) return;
+  const selected = visibleGapSegments.filter((segment) => verticals.includes(segment));
+  button.textContent = selected.length === verticals.length ? "All verticals" : `${selected.length} verticals`;
+  button.classList.toggle("has-selection", selected.length !== verticals.length);
+  menu.innerHTML = [
+    `<button class="filter-clear" type="button" data-gap-segment-all>Show all verticals</button>`,
+    ...verticals.map((vertical) => renderMultiOption(vertical, selected.includes(vertical)))
+  ].join("");
+  menu.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("change", () => {
+      visibleGapSegments = Array.from(menu.querySelectorAll("input:checked")).map((item) => item.value);
+      renderPlanning();
+    });
+  });
+  menu.querySelector("[data-gap-segment-all]")?.addEventListener("click", () => {
+    visibleGapSegments = [...verticals];
+    renderPlanning();
+  });
 }
 
 function renderGapCard(vertical) {
