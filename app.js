@@ -37,6 +37,12 @@ const PAGE_DESCRIPTIONS = {
   relationships: "Review repeat contacts, relationship arcs, and recommended next steps.",
   settings: "Configure ICP scoring weights, optional AI assistance, and HubSpot export or sync settings."
 };
+const METRIC_ICONS = {
+  Events: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4M16 2v4M4 9h16M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></svg>`,
+  "Tier A targets": `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.2 1 6-5.4-2.9-5.4 2.9 1-6-4.4-4.2 6.1-.9Z"/></svg>`,
+  Committed: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg>`,
+  Reach: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM2 12h20M12 2a12 12 0 0 1 0 20M12 2a12 12 0 0 0 0 20"/></svg>`
+};
 
 const state = migrateState(loadState());
 let selectedConferenceId = state.conferences[0]?.id;
@@ -262,6 +268,7 @@ function renderFilters() {
   renderMultiFilter("vertical", verticals, "verticals");
   renderMultiFilter("region", regions, "regions");
   renderMultiFilter("status", statuses, "statuses");
+  renderActiveFilterChips();
   renderClusterRegionFilter(regions);
   $("#leadConference").innerHTML = state.conferences
     .map((c) => `<option value="${c.id}">${c.name} - ${c.city}</option>`)
@@ -295,6 +302,7 @@ function renderMultiFilter(key, options, pluralLabel) {
   const menu = $(`#${key}Filter`);
   const button = $(`#${key}FilterButton`);
   const selected = filterState[key] || [];
+  button.classList.toggle("has-selection", selected.length > 0);
   button.textContent = selected.length ? `${selected.length} ${pluralLabel}` : `All ${pluralLabel}`;
   menu.innerHTML = [
     `<button class="filter-clear" type="button" data-filter-clear="${key}">Clear ${key}</button>`,
@@ -313,6 +321,27 @@ function renderMultiFilter(key, options, pluralLabel) {
     filterState[key] = [];
     renderFilters();
     renderConferenceRows();
+  });
+}
+
+function renderActiveFilterChips() {
+  const container = $("#activeFilterChips");
+  if (!container) return;
+  const labels = { vertical: "Vertical", region: "Region", status: "Status" };
+  const chips = Object.entries(filterState).flatMap(([key, values]) =>
+    values.map((value) => ({ key, value, label: labels[key] || key }))
+  );
+  container.innerHTML = chips.length
+    ? chips.map(({ key, value, label }) => `<span class="filter-chip"><span>${label}: ${value}</span><button type="button" data-filter-chip="${key}" data-filter-value="${value}" aria-label="Clear ${label} ${value}">x</button></span>`).join("")
+    : "";
+  container.querySelectorAll("[data-filter-chip]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.filterChip;
+      opportunityFilter = null;
+      filterState[key] = (filterState[key] || []).filter((value) => value !== button.dataset.filterValue);
+      renderFilters();
+      renderConferenceRows();
+    });
   });
 }
 
@@ -420,7 +449,12 @@ function renderMetrics(items) {
     ["Committed", committed.length],
     ["Reach", audience.toLocaleString()]
   ]
-    .map(([label, value]) => `<div class="metric"><strong>${value}</strong><span>${label}</span></div>`)
+    .map(([label, value]) => `<div class="metric">
+      <span class="metric-icon">${METRIC_ICONS[label]}</span>
+      <strong>${value}</strong>
+      <span>${label}</span>
+      ${label === "Reach" ? `<small>From approved attendance only</small>` : ""}
+    </div>`)
     .join("");
 }
 
@@ -436,7 +470,7 @@ function renderConferenceRows() {
         <td><strong>${c.name}</strong></td>
         <td>${formatDateRange(c)}</td>
         <td><strong>${c.region}</strong><br><span class="muted">${c.city}, ${c.country}</span></td>
-        <td>${c.verticals.map((v) => `<span class="pill">${v}</span>`).join(" ")}</td>
+        <td><div class="vertical-pill-group">${c.verticals.map((v) => `<span class="vertical-pill">${v}</span>`).join("")}</div></td>
         <td>${c.audience.toLocaleString()}</td>
         <td><div class="score"><strong>${score} <span class="pill tier-${tier.toLowerCase()}">Tier ${tier}</span></strong><div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div></div></td>
         <td>${renderTeamSelect(c)}</td>

@@ -374,12 +374,15 @@ button {
 }
 
 .metric {
+  position: relative;
   padding: 16px;
+  min-height: 112px;
 }
 
 .metric strong {
   display: block;
   font-size: 28px;
+  padding-right: 38px;
 }
 
 .metric span,
@@ -387,12 +390,51 @@ button {
   color: var(--muted);
 }
 
+.metric > span:not(.metric-icon) {
+  display: block;
+  margin-top: 4px;
+  font-weight: 750;
+}
+
+.metric small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.metric-icon {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--brand-3);
+  color: var(--primary);
+  opacity: 0.82;
+}
+
+.metric-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .toolbar {
   display: grid;
   grid-template-columns: 2fr repeat(3, minmax(130px, 1fr));
   gap: 12px;
   align-items: end;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .table-actions {
@@ -448,6 +490,12 @@ textarea {
   color: var(--ink);
   font-weight: 700;
   position: relative;
+}
+
+.multi-filter-button.has-selection {
+  border-color: rgba(9, 118, 168, 0.38);
+  background: var(--brand-3);
+  color: var(--primary-dark);
 }
 
 .multi-filter-button::after {
@@ -513,6 +561,54 @@ textarea {
   width: auto;
 }
 
+.active-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+  margin: 0 0 14px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  max-width: 100%;
+  border: 1px solid #d8e5e9;
+  border-radius: 999px;
+  padding: 2px 4px 2px 9px;
+  background: #f5fafb;
+  color: #31556a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.filter-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-chip button {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #e6f2f5;
+  color: #31556a;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.filter-chip button:hover {
+  background: #d7e8ed;
+}
+
 .primary-button,
 .ghost-button {
   border-radius: 8px;
@@ -555,12 +651,12 @@ td {
   text-align: left;
   padding: 13px 14px;
   border-bottom: 1px solid var(--line);
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 th {
   position: relative;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0;
@@ -574,7 +670,7 @@ th {
   color: inherit;
   text-align: left;
   text-transform: uppercase;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   position: relative;
 }
@@ -613,6 +709,29 @@ tbody tr:hover {
   padding: 2px 9px;
   font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
+}
+
+.vertical-pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 170px;
+}
+
+.vertical-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #f1f5f4;
+  color: #334e5a;
+  border: 1px solid #dfe7e5;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
