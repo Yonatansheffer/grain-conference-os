@@ -1005,6 +1005,7 @@ tbody tr:hover {
 }
 
 .calendar-day {
+  position: relative;
   min-height: 116px;
   min-width: 0;
   border: 1px solid var(--line);
@@ -1014,7 +1015,7 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .calendar-day.empty {
@@ -1030,12 +1031,13 @@ tbody tr:hover {
   display: grid;
   gap: 4px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .calendar-event {
   box-sizing: border-box;
   display: block;
+  position: relative;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -1047,9 +1049,61 @@ tbody tr:hover {
   font-weight: 850;
   text-align: left;
   line-height: 1.25;
+}
+
+.calendar-event > span:first-child {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.calendar-tooltip {
+  position: absolute;
+  z-index: 9;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 260px;
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid #cfe8ee;
+  border-radius: 8px;
+  background: #fffefa;
+  color: var(--ink);
+  box-shadow: 0 18px 44px rgba(16, 38, 58, 0.16);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.calendar-tooltip strong,
+.calendar-tooltip span {
+  display: block;
+  margin: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.calendar-tooltip span {
+  color: var(--muted);
+}
+
+.calendar-event:hover,
+.calendar-event:focus-visible {
+  z-index: 8;
+}
+
+.calendar-event:hover .calendar-tooltip,
+.calendar-event:focus-visible .calendar-tooltip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .cluster-config {
@@ -1137,6 +1191,102 @@ tbody tr:hover {
   border-radius: 8px;
   padding: 14px;
   background: #fbfcfa;
+}
+
+.trip-cluster {
+  display: grid;
+  gap: 11px;
+  background: #fffdf8;
+}
+
+.cluster-head,
+.cluster-efficiency {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.cluster-head strong {
+  margin: 0;
+}
+
+.cluster-head span {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.cluster-efficiency {
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid #d8edf5;
+  border-radius: 8px;
+  background: var(--brand-3);
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.cluster-events,
+.cluster-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.cluster-event {
+  display: inline-grid;
+  gap: 2px;
+  max-width: 100%;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.cluster-event span,
+.cluster-event small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cluster-event small {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  opacity: 0.76;
+}
+
+.cluster-event-committed {
+  border: 1px solid #b9e9f7;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.cluster-event-pending {
+  border: 1px dashed #d7ad49;
+  background: #fff9e8;
+  color: #77550a;
+}
+
+.add-trip-button {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: left;
+}
+
+.add-trip-button:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
 }
 
 .gap {
