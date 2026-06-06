@@ -36,6 +36,41 @@ const SCORE_WEIGHT_LABELS = {
   audienceScale: "Audience Scale",
   travelBudgetRoi: "Travel & Budget ROI"
 };
+const SCORE_PROFILE_PRESETS = {
+  enterprise: {
+    icon: "&#127919;",
+    label: "Hyper-Targeted Enterprise Mode",
+    weights: {
+      industryFit: 100,
+      fxExposurePain: 95,
+      decisionMakerSeniority: 85,
+      audienceScale: 20,
+      travelBudgetRoi: 10
+    }
+  },
+  travelLean: {
+    icon: "&#128737;",
+    label: "High-ROI / Travel Lean Mode",
+    weights: {
+      industryFit: 90,
+      fxExposurePain: 80,
+      decisionMakerSeniority: 70,
+      audienceScale: 30,
+      travelBudgetRoi: 85
+    }
+  },
+  footprint: {
+    icon: "&#128640;",
+    label: "Aggressive Footprint Mode",
+    weights: {
+      industryFit: 80,
+      fxExposurePain: 75,
+      decisionMakerSeniority: 60,
+      audienceScale: 80,
+      travelBudgetRoi: 40
+    }
+  }
+};
 const CONFIRMED_STATUSES = ["Committed", "Approved", "Confirmed"];
 const PAGE_TITLES = {
   conferences: "Conferences",

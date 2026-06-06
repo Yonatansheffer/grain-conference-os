@@ -22,6 +22,7 @@ let isRecordingScout = false;
 let scoutMediaRecorder = null;
 let scoutAudioChunks = [];
 let editingConferenceId = "";
+let editingLeadId = "";
 let pendingScoutEventId = "";
 let leadRegistryExpanded = false;
 
@@ -210,7 +211,7 @@ function relationshipVerdict(group) {
     case "stalled":
       return a.longCycle
         ? `Long-cycle listener: ${a.encounters} encounters${span} with no lift in sentiment${a.hasBudgetSignal ? " and recurring budget hesitation" : ""}. Likely a polite tire-kicker — make one direct budget/owner ask, then de-prioritize if it stays flat.`
-        : `Holding pattern: repeat interest but sentiment has not moved${a.hasBudgetSignal ? "; budget and owner still unconfirmed" : ""}. Qualify the buying owner before more nurturing.`;
+        : `Medium engagement: repeat interest is present, but sentiment has not moved${a.hasBudgetSignal ? "; budget and owner remain unconfirmed" : ""}. Qualify the buying owner before more nurturing.`;
     default:
       return `Known contact across ${a.encounters} encounters${span}. Keep the context visible without over-weighting the repeat count.`;
   }
@@ -1663,7 +1664,7 @@ function relationshipKey(group) {
 }
 
 function renderArcSummary(slot, summary) {
-  slot.innerHTML = `<strong>Relationship arc</strong><span>${escapeHtml(summary)}</span>`;
+  slot.innerHTML = `<strong>AI summary</strong><span>${escapeHtml(summary)}</span>`;
 }
 
 // Re-paint any summaries we have already generated after the list re-renders,
@@ -1693,7 +1694,7 @@ async function summarizeRelationshipArc(encodedIds, button) {
   button.disabled = true;
   const originalLabel = button.textContent;
   button.textContent = state.ai.key ? "Summarizing..." : "Building...";
-  renderArcSummary(slot, state.ai.key ? "Generating an AI arc summary..." : "Building a local arc summary...");
+  renderArcSummary(slot, state.ai.key ? "Generating an AI summary..." : "Building a local summary...");
   let summary;
   try {
     summary = state.ai.key ? await summarizeArcWithAi(group) : localArcSummary(group);
@@ -1783,8 +1784,12 @@ function setupCapture() {
   $("#recordScribble").addEventListener("click", toggleScribbleRecording);
   $("#leadForm").addEventListener("submit", (event) => {
     event.preventDefault();
+    const existingLead = editingLeadId
+      ? state.leads.find((lead) => lead.id === editingLeadId)
+      : null;
     const lead = {
-      id: createId(),
+      ...(existingLead || {}),
+      id: existingLead?.id || createId(),
       conferenceId: $("#leadConference").value,
       firstName: $("#firstName").value.trim(),
       lastName: $("#lastName").value.trim(),
@@ -1797,17 +1802,24 @@ function setupCapture() {
       notes: $("#notes").value.trim(),
       sentiment: $("input[name='sentiment']:checked").value,
       nextStep: $("#nextStep").value.trim(),
-      createdAt: new Date().toISOString()
+      createdAt: existingLead?.createdAt || new Date().toISOString()
     };
-    state.leads.push(lead);
+    if (existingLead) Object.assign(existingLead, lead);
+    else state.leads.push(lead);
     saveState();
-    $("#leadForm").reset();
-    $("#scribbleInput").value = "";
-    $("#scribbleStatus").textContent = "";
-    $("#sentStrong").checked = true;
+    resetLeadForm();
     renderAll();
-    showToast("Lead saved. Relationship tracking updated.", "success");
+    showToast(existingLead ? "Lead updated." : "Lead saved. Relationship tracking updated.", "success");
   });
+}
+
+function resetLeadForm() {
+  editingLeadId = "";
+  $("#leadForm").reset();
+  $("#scribbleInput").value = "";
+  $("#scribbleStatus").textContent = "";
+  $("#sentStrong").checked = true;
+  document.querySelector("#leadForm .capture-actions .primary-button").textContent = "Save lead";
 }
 
 async function parseFloorScribble() {
@@ -1894,10 +1906,13 @@ function applyParsedLead(parsed, raw) {
 }
 
 function cleanScribblePayload(raw) {
-  return String(raw || "")
-    .replace(/^\s*raw floor scribble\s*:\s*/i, "")
+  const cleaned = String(raw || "")
+    .replace(/\braw floor scribble\s*:\s*/gi, "")
+    .replace(/\bquick note\s*:\s*/gi, "")
     .replace(/\s+/g, " ")
     .trim();
+  const duplicate = cleaned.match(/^(.+?)\s+\1$/i);
+  return duplicate?.[1]?.trim() || cleaned;
 }
 
 function guessConferenceId(raw) {
@@ -2118,23 +2133,6 @@ function renderMatchPreview() {
     : "No likely repeat contact yet.";
 }
 
-// "Generate all" simply drives the per-card summarizer for every relationship,
-// reusing the same cache and inline slots so the list stays intact and the rep
-// keeps the timeline, signal, and next steps in view alongside each brief.
-async function generateAiSummaries() {
-  const buttons = $$("[data-arc-summary]");
-  if (!buttons.length) {
-    showToast("No repeat contacts yet. Capture a lead and a relationship arc will appear here.", "info");
-    return;
-  }
-  if (!state.ai.key) {
-    showToast("No AI key saved. Building local relationship arc summaries instead.", "info");
-  }
-  for (const button of buttons) {
-    await summarizeRelationshipArc(button.dataset.arcSummary, button);
-  }
-}
-
 function exportCsv() {
   const rows = [
     ["Email", "First Name", "Last Name", "Company", "Job Title", "Phone", "Conference", "Lead Status", "Notes", "Next Step"],
@@ -2218,7 +2216,7 @@ function setupConferenceActions() {
     }
   });
   document.addEventListener("click", (event) => {
-    if (!event.target.closest(".row-actions-cell")) closeRowActionMenus();
+    if (!event.target.closest(".row-actions-cell, .lead-actions-cell")) closeRowActionMenus();
   });
 }
 
@@ -2228,7 +2226,7 @@ function renderLeadRegistry() {
   if (!state.leads.length) {
     leadRegistryExpanded = false;
     hub.classList.add("lead-registry-empty");
-    hub.innerHTML = "<div class='empty-state'><strong>No leads captured yet</strong><span>Saved leads will appear here for review and export.</span></div>";
+    hub.innerHTML = "<div class='empty-state'><strong>No leads captured yet.</strong><span>Use the free-text or audio capture tool above to instantly hydrate your active event pipeline.</span></div>";
     return;
   }
   hub.classList.remove("lead-registry-empty");
@@ -2241,7 +2239,7 @@ function renderLeadRegistry() {
       <div class="table-wrap lead-registry-table-wrap">
         <table class="lead-registry-table">
           <thead>
-            <tr><th>Contact Details</th><th>Company &amp; Segment</th><th>Encounter Source</th><th>Quick Note Context</th></tr>
+            <tr><th class="actions-header" aria-label="Lead actions"></th><th>Contact Details</th><th>Contact Info</th><th>Company &amp; Segment</th><th>Encounter Source</th><th>Quick Note Context</th></tr>
           </thead>
           <tbody>
             ${[...state.leads].reverse().map(renderLeadRegistryRow).join("")}
@@ -2264,17 +2262,75 @@ function renderLeadRegistry() {
     $("#leadRegistryToggle").setAttribute("aria-expanded", String(leadRegistryExpanded));
   });
   $("#exportCsv")?.addEventListener("click", exportCsv);
+  $$("[data-lead-row-menu-toggle]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleRowActionMenu(button);
+    });
+  });
+  $$("[data-edit-lead]").forEach((button) => {
+    button.addEventListener("click", () => openEditLeadForm(button.dataset.editLead));
+  });
+  $$("[data-delete-lead]").forEach((button) => {
+    button.addEventListener("click", () => deleteLead(button.dataset.deleteLead));
+  });
 }
 
 function renderLeadRegistryRow(lead) {
   const conference = state.conferences.find((item) => item.id === lead.conferenceId);
   const vertical = lead.vertical || "Other";
   return `<tr>
+    <td class="lead-actions-cell">
+      <button class="row-menu-button" type="button" data-lead-row-menu-toggle="${escapeHtml(lead.id)}" data-row-menu-toggle="lead-${escapeHtml(lead.id)}" aria-label="Options for ${escapeHtml(lead.firstName || "lead")}" title="Lead options" aria-haspopup="menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </button>
+      <div class="row-action-menu" role="menu" data-row-menu="lead-${escapeHtml(lead.id)}">
+        <button type="button" role="menuitem" data-edit-lead="${escapeHtml(lead.id)}">Edit Lead</button>
+        <button class="danger-action" type="button" role="menuitem" data-delete-lead="${escapeHtml(lead.id)}">Delete Lead</button>
+      </div>
+    </td>
     <td><div class="lead-contact-cell"><strong>${escapeHtml([lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed lead")}</strong><small>${escapeHtml(lead.title || "Title not captured")}</small></div></td>
+    <td><div class="lead-contact-info"><a href="mailto:${escapeHtml(lead.email || "")}">${escapeHtml(lead.email || "Email not captured")}</a><a href="tel:${escapeHtml(lead.phone || "")}">${escapeHtml(lead.phone || "Phone not captured")}</a></div></td>
     <td><div class="lead-company-cell"><strong>${escapeHtml(lead.company || "Unknown company")}</strong><span class="vertical-pill ${verticalPillClass(vertical)}">${escapeHtml(vertical)}</span></div></td>
     <td>${escapeHtml(conference?.name || "Unknown event")}</td>
-    <td class="lead-note-cell">${escapeHtml(lead.notes || "No note captured")}</td>
+    <td class="lead-note-cell">${escapeHtml(cleanScribblePayload(lead.notes) || "No note captured")}</td>
   </tr>`;
+}
+
+function openEditLeadForm(id) {
+  const lead = state.leads.find((item) => item.id === id);
+  if (!lead) return;
+  editingLeadId = id;
+  closeRowActionMenus();
+  $("#leadConference").value = lead.conferenceId || state.conferences[0]?.id || "";
+  $("#firstName").value = lead.firstName || "";
+  $("#lastName").value = lead.lastName || "";
+  $("#company").value = lead.company || "";
+  $("#title").value = lead.title || "";
+  $("#email").value = lead.email || "";
+  $("#phone").value = lead.phone || "";
+  $("#leadVertical").value = lead.vertical || "Other";
+  $("#urgency").value = lead.urgency || "Exploring";
+  const sentiment = ["Strong", "Medium", "Weak"].includes(lead.sentiment) ? lead.sentiment : "Medium";
+  $(`input[name='sentiment'][value='${sentiment}']`).checked = true;
+  $("#nextStep").value = lead.nextStep || "";
+  $("#notes").value = cleanScribblePayload(lead.notes);
+  document.querySelector("#leadForm .capture-actions .primary-button").textContent = "Save changes";
+  $("#leadForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  setTimeout(() => $("#firstName")?.focus(), 180);
+}
+
+function deleteLead(id) {
+  const lead = state.leads.find((item) => item.id === id);
+  if (!lead) return;
+  closeRowActionMenus();
+  const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "this lead";
+  if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return;
+  state.leads = state.leads.filter((item) => item.id !== id);
+  if (editingLeadId === id) resetLeadForm();
+  saveState();
+  renderAll();
+  showToast(`${name} deleted.`, "success");
 }
 
 function openAddConferenceForm() {
@@ -2490,7 +2546,6 @@ function setupSettings() {
   });
   $("#saveWeights").addEventListener("click", saveScoringWeights);
   $("#pushHubspot").addEventListener("click", pushHubspot);
-  $("#aiSummaries").addEventListener("click", generateAiSummaries);
 }
 
 async function saveKeyAndLoadModels() {
@@ -2527,7 +2582,7 @@ async function saveKeyAndLoadModels() {
     state.ai = { provider, key: "", model: "" };
     saveState();
     clearAiModelSelect();
-    error.textContent = `Could not fetch models. Please check your ${AI_PROVIDER_CONFIG[provider].label} API key.`;
+    error.textContent = "Could not fetch models. Please check your API key.";
     renderSettingsStatus();
   } finally {
     button.disabled = false;
@@ -2620,30 +2675,94 @@ function renderSettingsStatus() {
 
 function renderWeightControls() {
   const weights = { ...DEFAULT_SCORE_WEIGHTS, ...(state.scoringWeights || {}) };
-  $("#weightControls").innerHTML = Object.entries(SCORE_WEIGHT_LABELS)
-    .map(([key, label]) => `<label class="weight-control">
-      <span>${label}</span>
-      <input type="range" min="0" max="100" step="1" value="${weights[key]}" data-score-weight="${key}" aria-label="${label} weight">
-      <input type="number" min="0" max="100" step="1" value="${weights[key]}" data-score-weight-number="${key}" aria-label="${label} percentage">
-      <strong>${weights[key]}%</strong>
-    </label>`)
+  const groups = [
+    {
+      title: "1. Core Target Qualifiers (Deal Breakers)",
+      className: "weight-group-core",
+      keys: ["industryFit", "fxExposurePain", "decisionMakerSeniority"]
+    },
+    {
+      title: "2. Operational Modifiers (Logistical Optimizers)",
+      className: "weight-group-operational",
+      keys: ["travelBudgetRoi", "audienceScale"]
+    }
+  ];
+  $("#scoreProfilePresets").innerHTML = Object.entries(SCORE_PROFILE_PRESETS)
+    .map(([key, preset]) => `<button class="score-profile-button" type="button" data-score-profile="${key}"><span aria-hidden="true">${preset.icon}</span>${escapeHtml(preset.label)}</button>`)
     .join("");
+  $("#weightControls").innerHTML = groups.map((group) => `<section class="weight-group ${group.className}">
+    <h4>${escapeHtml(group.title)}</h4>
+    <div class="weight-group-controls">
+      ${group.keys.map((key) => `<label class="weight-control">
+        <span>${escapeHtml(SCORE_WEIGHT_LABELS[key])}</span>
+        <input type="range" min="0" max="100" step="1" value="${weights[key]}" data-score-weight="${key}" aria-label="${escapeHtml(SCORE_WEIGHT_LABELS[key])} weight">
+        <input type="number" min="0" max="100" step="1" value="${weights[key]}" data-score-weight-number="${key}" aria-label="${escapeHtml(SCORE_WEIGHT_LABELS[key])} percentage">
+        <strong data-score-share="${key}">0% share</strong>
+      </label>`).join("")}
+    </div>
+  </section>`).join("");
+  $$("[data-score-profile]").forEach((button) => {
+    button.addEventListener("click", () => applyScoreProfile(button.dataset.scoreProfile));
+  });
   $$("[data-score-weight]").forEach((range) => {
     range.addEventListener("input", () => syncWeightInput(range.dataset.scoreWeight, range.value));
   });
   $$("[data-score-weight-number]").forEach((input) => {
     input.addEventListener("input", () => syncWeightInput(input.dataset.scoreWeightNumber, input.value));
   });
+  updateRelativeWeightShares();
+  updateActiveScoreProfile();
 }
 
 function syncWeightInput(key, value) {
   const cleanValue = clampWeight(value);
   const range = $(`[data-score-weight="${key}"]`);
   const number = $(`[data-score-weight-number="${key}"]`);
-  const label = number?.nextElementSibling;
   if (range) range.value = cleanValue;
   if (number) number.value = cleanValue;
-  if (label) label.textContent = `${cleanValue}%`;
+  updateRelativeWeightShares();
+  updateActiveScoreProfile();
+}
+
+function applyScoreProfile(profileKey) {
+  const preset = SCORE_PROFILE_PRESETS[profileKey];
+  if (!preset) return;
+  Object.entries(preset.weights).forEach(([key, value]) => {
+    const range = $(`[data-score-weight="${key}"]`);
+    const number = $(`[data-score-weight-number="${key}"]`);
+    if (range) range.value = value;
+    if (number) number.value = value;
+  });
+  updateRelativeWeightShares();
+  updateActiveScoreProfile(profileKey);
+}
+
+function updateRelativeWeightShares() {
+  const values = Object.keys(DEFAULT_SCORE_WEIGHTS).map((key) => [
+    key,
+    clampWeight($(`[data-score-weight-number="${key}"]`)?.value)
+  ]);
+  const total = values.reduce((sum, [, value]) => sum + value, 0);
+  values.forEach(([key, value]) => {
+    const badge = $(`[data-score-share="${key}"]`);
+    if (badge) badge.textContent = `${total ? ((value / total) * 100).toFixed(1) : "0.0"}% share`;
+  });
+}
+
+function updateActiveScoreProfile(forcedKey = "") {
+  const current = Object.fromEntries(
+    Object.keys(DEFAULT_SCORE_WEIGHTS).map((key) => [
+      key,
+      clampWeight($(`[data-score-weight-number="${key}"]`)?.value)
+    ])
+  );
+  $$("[data-score-profile]").forEach((button) => {
+    const preset = SCORE_PROFILE_PRESETS[button.dataset.scoreProfile];
+    const active = button.dataset.scoreProfile === forcedKey ||
+      (!forcedKey && Object.entries(preset.weights).every(([key, value]) => current[key] === value));
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 function saveScoringWeights() {

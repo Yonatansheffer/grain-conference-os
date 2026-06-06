@@ -17,12 +17,14 @@ function renderRelationshipCard(group) {
       <div class="relationship-timeline">
         ${orderedGroup.map((lead, index) => renderRelationshipTimelineStep(lead, orderedGroup[index - 1])).join("")}
       </div>
-      <div class="relationship-ai-summary" data-summary-slot="${encodedId}" aria-live="polite"></div>
+      <div class="relationship-summary-control">
+        <button class="ghost-button arc-summary-button" type="button" data-arc-summary="${encodedId}">Generate AI summary</button>
+        <div class="relationship-ai-summary" data-summary-slot="${encodedId}" aria-live="polite"></div>
+      </div>
       <div class="lead-enrichment" aria-live="polite"></div>
     </div>
     <div class="actions">
       <span class="relationship-signal signal-${signal.tone}">${escapeHtml(signal.label)}</span>
-      <button class="primary-button arc-summary-button" type="button" data-arc-summary="${encodedId}">AI arc summary</button>
       <div class="next-steps">
         <span class="muted">Next steps</span>
         ${relationshipNextSteps(orderedGroup).map((step) => `<button class="ghost-button action-${step.action}" type="button" data-next-step="${step.action}" data-group="${encodedId}">${escapeHtml(step.label)}</button>`).join("")}
@@ -81,18 +83,16 @@ function titleMutationVerb(previousTitle, currentTitle) {
 // flat repeat contact reads as a tire-kicker risk while a rising one reads as
 // warming, rather than every repeat looking the same.
 function relationshipSignal(group) {
-  const { stage, longCycle } = analyzeRelationship(group);
+  const { stage } = analyzeRelationship(group);
   switch (stage) {
     case "champion":
-      return { tone: "champion", label: "High-Velocity Champion" };
     case "warming":
-      return { tone: "warming", label: "Warming Opportunity" };
+      return { tone: "strong", label: "Strong" };
     case "cooling":
-      return { tone: "cooling", label: "Cooling Interest" };
+      return { tone: "weak", label: "Weak" };
     case "stalled":
-      return { tone: "latent", label: longCycle ? "Tire-Kicker Risk" : "Holding Pattern" };
     default:
-      return { tone: "latent", label: "Known Contact" };
+      return { tone: "medium", label: "Medium" };
   }
 }
 
