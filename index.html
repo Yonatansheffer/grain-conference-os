@@ -79,14 +79,17 @@
                   <th><button class="sort-button" type="button" data-sort="score">ICP / Tier</button></th>
                   <th><button class="sort-button" type="button" data-sort="team">Team</button></th>
                   <th><button class="sort-button" type="button" data-sort="status">Status</button></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="conferenceRows"></tbody>
             </table>
           </div>
           <div class="table-actions">
-            <button id="exportConferencesCsv" class="primary-button" type="button">Export view CSV</button>
-            <button id="addConferenceButton" class="primary-button" type="button">Add Conference</button>
+            <button id="exportConferencesCsv" class="ghost-button export-button" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg>
+              <span>Export view CSV</span>
+            </button>
           </div>
           <div id="pipelineScout" class="panel scout-panel">
             <div class="scout-head">

@@ -447,7 +447,7 @@ button {
   grid-template-columns: 2fr repeat(3, minmax(130px, 1fr));
   gap: 12px;
   align-items: end;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   padding: 14px 16px;
   background: var(--slate-soft);
   border: 1px solid var(--line);
@@ -460,6 +460,24 @@ button {
   justify-content: flex-end;
   flex-wrap: wrap;
   margin: 12px 0 16px;
+}
+
+.export-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  color: var(--muted);
+}
+
+.export-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 label,
@@ -584,6 +602,12 @@ textarea {
   gap: 6px;
   min-height: 24px;
   margin: 0 0 14px;
+}
+
+.active-filter-chips:empty {
+  display: none;
+  min-height: 0;
+  margin: 0;
 }
 
 .filter-chip {
@@ -841,6 +865,7 @@ tbody tr:hover {
 }
 
 .score {
+  position: relative;
   display: grid;
   gap: 6px;
   min-width: 130px;
@@ -875,6 +900,118 @@ tbody tr:hover {
 
 .score-fill-tier-c {
   background: var(--gold);
+}
+
+.score-with-tooltip {
+  cursor: help;
+  outline: none;
+}
+
+.score-tooltip {
+  position: absolute;
+  z-index: 12;
+  left: 0;
+  bottom: calc(100% + 9px);
+  width: 260px;
+  max-width: min(260px, 70vw);
+  padding: 9px 10px;
+  border: 1px solid #cfe2e8;
+  border-radius: 8px;
+  background: #fffefa;
+  color: var(--ink);
+  box-shadow: 0 14px 34px rgba(31, 53, 64, 0.18);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.score-with-tooltip:hover .score-tooltip,
+.score-with-tooltip:focus-visible .score-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.conference-source-link,
+.detail-title-link {
+  color: var(--primary-dark);
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.conference-source-link:hover,
+.detail-title-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.row-actions-cell {
+  width: 54px;
+  text-align: center;
+}
+
+.row-delete-button {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.row-delete-button:hover {
+  border-color: #f0c6be;
+  background: #fff5f2;
+  color: var(--red);
+}
+
+.row-delete-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.add-conference-row td {
+  padding: 0;
+  border-bottom: 0;
+}
+
+.add-conference-row:hover {
+  background: transparent;
+}
+
+.add-conference-row-button {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-top: 1px dashed #c6d9d1;
+  background: #f9fcfa;
+  color: var(--primary-dark);
+  font-weight: 850;
+}
+
+.add-conference-row-button:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.add-conference-row-button span {
+  font-size: 18px;
+  line-height: 1;
 }
 
 .table-select {
@@ -1440,6 +1577,10 @@ tbody tr:hover {
   gap: 10px;
   align-content: start;
   min-height: 218px;
+}
+
+.hubspot-settings-card .settings-config {
+  min-height: 0;
 }
 
 .settings-fields {

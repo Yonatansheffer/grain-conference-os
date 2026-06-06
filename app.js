@@ -883,13 +883,21 @@ function renderConferenceRows() {
       const tier = tierFor(score);
       return renderConferenceRow(c, score, tier);
     })
-    .join("");
+    .join("") + renderAddConferenceRow();
   $$("#conferenceRows tr").forEach((row) => {
+    if (!row.dataset.id) return;
     row.addEventListener("click", () => {
       selectedConferenceId = row.dataset.id;
       openConferenceDetail(selectedConferenceId);
     });
   });
+  $$("[data-row-action]").forEach((control) => {
+    control.addEventListener("click", (event) => event.stopPropagation());
+  });
+  $$("[data-delete-conference]").forEach((button) => {
+    button.addEventListener("click", () => deleteConference(button.dataset.deleteConference));
+  });
+  $("#addConferenceRowButton")?.addEventListener("click", openAddConferenceForm);
   $$(".table-select").forEach((select) => {
     select.addEventListener("click", (event) => event.stopPropagation());
     select.addEventListener("change", handleTableEdit);
@@ -907,6 +915,34 @@ function renderConferenceRows() {
     });
   });
   if (!items.some((c) => c.id === selectedConferenceId)) selectedConferenceId = items[0]?.id;
+}
+
+function renderAddConferenceRow() {
+  return `<tr class="add-conference-row">
+    <td colspan="9">
+      <button id="addConferenceRowButton" class="add-conference-row-button" type="button">
+        <span aria-hidden="true">+</span>
+        Add New Event
+      </button>
+    </td>
+  </tr>`;
+}
+
+function deleteConference(id) {
+  const conference = state.conferences.find((item) => item.id === id);
+  if (!conference) return;
+  if (conference.status === "Committed") {
+    showToast("Cannot delete a committed conference. Please change the status to Pending or Uncommitted first.", "warning", { duration: 5200 });
+    return;
+  }
+  if (!window.confirm(`Delete ${conference.name}? This cannot be undone.`)) return;
+  state.conferences = state.conferences.filter((item) => item.id !== id);
+  state.leads = state.leads.filter((lead) => lead.conferenceId !== id);
+  selectedConferenceId = state.conferences[0]?.id || "";
+  saveState();
+  renderFilters();
+  renderAll();
+  showToast(`${conference.name} deleted.`, "success");
 }
 
 function renderSortButtons() {
@@ -947,26 +983,23 @@ function renderSelectedConference() {
     return;
   }
   const score = scoreConference(c);
-  const nearby = state.conferences
-    .filter((other) => other.id !== c.id && Math.abs(new Date(other.startDate) - new Date(c.startDate)) / 86400000 <= 30)
-    .slice(0, 3);
+  const conferenceTitle = c.source
+    ? `<a class="detail-title-link" href="${escapeHtml(c.source)}" target="_blank" rel="noreferrer">${escapeHtml(c.name)}</a>`
+    : escapeHtml(c.name);
   $("#conferenceDetailBody").innerHTML = `<div class="modal-head">
     <span class="eyebrow">Selected event</span>
-    <h3 id="conferenceDetailTitle">${c.name}</h3>
+    <h3 id="conferenceDetailTitle">${conferenceTitle}</h3>
     <p class="muted">${formatDateRange(c)} in ${c.city}, ${c.country}. Estimated ${c.audience.toLocaleString()} attendees.</p>
   </div>
   <div class="detail-grid">
     <div>
-      <p class="eyebrow">Coverage</p>
       <p><strong>Status:</strong> ${c.status}</p>
       <p><strong>Team:</strong> ${teamLabel(c)}</p>
       <p><strong>Region:</strong> ${c.region}</p>
-      <p>${c.source ? `<a href="${c.source}" target="_blank" rel="noreferrer">Source</a>` : "No source URL saved."}</p>
     </div>
     <div>
       <p class="eyebrow">Why it ranks ${score}</p>
       <p>${scoreNarrative(c)}</p>
-      <p><strong>Trip piggyback:</strong> ${nearby.length ? nearby.map((n) => `${n.name} (${n.city})`).join(", ") : "No close cluster in the next 30 days."}</p>
     </div>
   </div>
   <div class="account-presence" id="accountPresence" data-conf-id="${c.id}"></div>`;
@@ -2019,17 +2052,6 @@ function downloadCsv(rows, filename) {
 
 function setupConferenceActions() {
   $("#exportConferencesCsv").addEventListener("click", exportConferencesCsv);
-  $("#addConferenceButton").addEventListener("click", () => {
-    $("#addConferenceForm").reset();
-    $("#newConferenceAudience").value = "2500";
-    $("#newBuyerDensity").value = "4";
-    $("#newPspRelevance").value = "4";
-    $("#newFxRelevance").value = "4";
-    $("#newTravelRelevance").value = "3";
-    $("#newSeniority").value = "4";
-    $("#newCostTier").value = "3";
-    openModal("#addConferenceModal");
-  });
   $("#addConferenceForm").addEventListener("submit", addConferenceFromForm);
   $$("[data-close-modal]").forEach((button) => {
     button.addEventListener("click", () => closeModals());
@@ -2042,6 +2064,18 @@ function setupConferenceActions() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeModals();
   });
+}
+
+function openAddConferenceForm() {
+  $("#addConferenceForm").reset();
+  $("#newConferenceAudience").value = "2500";
+  $("#newBuyerDensity").value = "4";
+  $("#newPspRelevance").value = "4";
+  $("#newFxRelevance").value = "4";
+  $("#newTravelRelevance").value = "3";
+  $("#newSeniority").value = "4";
+  $("#newCostTier").value = "3";
+  openModal("#addConferenceModal");
 }
 
 function addConferenceFromForm(event) {
