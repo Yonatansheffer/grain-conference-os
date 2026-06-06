@@ -216,13 +216,15 @@ function setupSidebar() {
   const resizer = $("#sidebarResizer");
   const saved = JSON.parse(localStorage.getItem(SIDEBAR_KEY) || "{}");
 
-  if (saved.width) {
-    shell.style.setProperty("--sidebar-width", `${saved.width}px`);
-  }
+  // Only apply a custom width when expanded; collapsed always uses the narrow
+  // icon rail. Otherwise a saved inline width would override the collapsed rule
+  // and leave a wide bar showing only icons.
   if (saved.collapsed) {
     shell.classList.add("sidebar-collapsed");
     toggle.setAttribute("aria-expanded", "false");
     toggle.setAttribute("aria-label", "Expand sidebar");
+  } else if (saved.width) {
+    shell.style.setProperty("--sidebar-width", `${saved.width}px`);
   }
 
   toggle.addEventListener("click", () => {
@@ -230,6 +232,7 @@ function setupSidebar() {
     shell.classList.toggle("sidebar-collapsed", collapsed);
     toggle.setAttribute("aria-expanded", String(!collapsed));
     toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    applySidebarWidth(shell, collapsed);
     localStorage.setItem(SIDEBAR_KEY, JSON.stringify({ ...savedSidebar(), collapsed }));
   });
 
@@ -261,6 +264,17 @@ function savedSidebar() {
   return JSON.parse(localStorage.getItem(SIDEBAR_KEY) || "{}");
 }
 
+// Collapsed drops any inline width so the narrow icon rail applies; expanded
+// restores the user's saved width if they had resized the sidebar.
+function applySidebarWidth(shell, collapsed) {
+  const width = savedSidebar().width;
+  if (collapsed || !width) {
+    shell.style.removeProperty("--sidebar-width");
+  } else {
+    shell.style.setProperty("--sidebar-width", `${width}px`);
+  }
+}
+
 function collapseSidebar() {
   const shell = $("#appShell");
   const toggle = $("#sidebarToggle");
@@ -268,6 +282,7 @@ function collapseSidebar() {
   shell.classList.add("sidebar-collapsed");
   toggle?.setAttribute("aria-expanded", "false");
   toggle?.setAttribute("aria-label", "Expand sidebar");
+  applySidebarWidth(shell, true);
   localStorage.setItem(SIDEBAR_KEY, JSON.stringify({ ...savedSidebar(), collapsed: true }));
 }
 
