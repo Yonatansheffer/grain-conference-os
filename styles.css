@@ -908,10 +908,8 @@ tbody tr:hover {
 }
 
 .score-tooltip {
-  position: absolute;
-  z-index: 12;
-  left: 0;
-  bottom: calc(100% + 9px);
+  position: fixed;
+  z-index: 80;
   width: 260px;
   max-width: min(260px, 70vw);
   padding: 9px 10px;
@@ -924,14 +922,15 @@ tbody tr:hover {
   font-weight: 700;
   line-height: 1.4;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transform: translateY(4px);
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
 }
 
-.score-with-tooltip:hover .score-tooltip,
-.score-with-tooltip:focus-visible .score-tooltip {
+.score-tooltip.visible {
   opacity: 1;
+  visibility: visible;
   transform: translateY(0);
 }
 

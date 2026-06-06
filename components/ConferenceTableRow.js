@@ -18,10 +18,9 @@ function renderConferenceRow(conference, score, tier) {
     <td><strong>${escapeHtml(conference.region)}</strong><br><span class="muted">${escapeHtml(conference.city)}, ${escapeHtml(conference.country)}</span></td>
     <td><div class="vertical-pill-group">${conference.verticals.map((vertical) => `<span class="vertical-pill ${verticalPillClass(vertical)}">${escapeHtml(vertical)}</span>`).join("")}</div></td>
     <td>${conference.audience.toLocaleString()}</td>
-    <td><div class="score score-with-tooltip" tabindex="0" aria-describedby="score-rationale-${conference.id}">
+    <td><div class="score score-with-tooltip" tabindex="0" data-score-rationale="${escapeHtml(rationale)}">
       <strong>${score} <span class="pill tier-${tier.toLowerCase()}">Tier ${tier}</span></strong>
       <div class="score-bar"><div class="score-fill score-fill-tier-${tier.toLowerCase()}" style="width:${score}%"></div></div>
-      <span class="score-tooltip" id="score-rationale-${conference.id}" role="tooltip">${escapeHtml(rationale)}</span>
     </div></td>
     <td class="status-team-cell">${renderStatusTeamCell(conference)}</td>
   </tr>`;

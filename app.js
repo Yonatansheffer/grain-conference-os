@@ -10,6 +10,7 @@ let clusterConfig = { regions: [], windowDays: 10 };
 let visibleGapSegments = ["Fintech", "Payments", "Treasury"];
 let scoutState = { gap: null, results: [], loading: false, resolvedGapKey: "" };
 const relationshipSummaryCache = new Map();
+const hiddenRelationshipSummaries = new Set();
 // Session-state caches for the ICP Account Presence Matcher, keyed by conference
 // id. Keeping predictions and drafted hooks here means clicking around the app
 // or retuning scoring sliders never re-fires an expensive model call.
@@ -568,13 +569,17 @@ async function runScoutSearch() {
   renderScoutResults();
   try {
     const rawResults = state.ai.key ? await fetchAiScoutResults(prompt) : localScoutResults(prompt);
-    scoutState.results = processScoutResults(rawResults);
+    $("#scoutStatus").textContent = "Verifying candidate source websites...";
+    scoutState.results = await processScoutResults(rawResults);
     $("#scoutStatus").textContent = scoutState.results.length
       ? `${scoutState.results.length} validated candidates ready.`
-      : "No validated 2026/2027 candidates matched the guardrails.";
+      : "No candidates passed live website and 2026/2027 validation.";
   } catch (error) {
-    scoutState.results = processScoutResults(localScoutResults(prompt));
-    $("#scoutStatus").textContent = `AI scout fell back to local heuristics: ${error.message}`;
+    $("#scoutStatus").textContent = "AI scout failed. Verifying local candidates...";
+    scoutState.results = await processScoutResults(localScoutResults(prompt));
+    $("#scoutStatus").textContent = scoutState.results.length
+      ? `AI unavailable. ${scoutState.results.length} locally sourced candidates passed live website verification.`
+      : "AI unavailable and no local candidates passed live website verification.";
   } finally {
     scoutState.loading = false;
     renderScoutResults();
@@ -696,12 +701,18 @@ function localScoutResults(prompt) {
     .filter((event) => !wantsQ3 || ["2026-07", "2026-08", "2026-09"].some((prefix) => event.startDate.startsWith(prefix)));
 }
 
-function processScoutResults(events) {
-  return (Array.isArray(events) ? events : [])
+async function processScoutResults(events) {
+  const candidates = (Array.isArray(events) ? events : [])
     .map(sanitizeScoutEvent)
     .filter(Boolean)
-    .filter((event) => validateScoutDate(event.startDate) && validateScoutDate(event.endDate))
-    .map((event) => {
+    .filter((event) => validateScoutDate(event.startDate) && validateScoutDate(event.endDate));
+  const verificationResults = await Promise.all(candidates.map(async (event) => ({
+    event,
+    verified: await verifyScoutSource(event.source)
+  })));
+  return verificationResults
+    .filter(({ verified }) => verified)
+    .map(({ event }) => {
       const duplicate = findDuplicateConference(event);
       return {
         event,
@@ -710,6 +721,41 @@ function processScoutResults(events) {
         piggyback: duplicate ? "" : piggybackOpportunity(event)
       };
     });
+}
+
+async function verifyScoutSource(value) {
+  let url;
+  try {
+    url = new URL(String(value || "").trim());
+  } catch (error) {
+    return false;
+  }
+  if (url.protocol !== "https:" || !url.hostname.includes(".")) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
+  try {
+    let response = await fetch(url.href, {
+      method: "HEAD",
+      redirect: "follow",
+      cache: "no-store",
+      signal: controller.signal
+    });
+    if (response.status === 405 || response.status === 501) {
+      response = await fetch(url.href, {
+        method: "GET",
+        redirect: "follow",
+        cache: "no-store",
+        signal: controller.signal
+      });
+    }
+    if (!response.ok) return false;
+    const finalUrl = new URL(response.url || url.href);
+    return finalUrl.protocol === "https:" && !/(?:^|\/)(?:404|not-found|error)(?:\/|$)/i.test(finalUrl.pathname);
+  } catch (error) {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function sanitizeScoutEvent(event) {
@@ -1022,7 +1068,38 @@ function renderConferenceRows() {
       handleTeamEdit(editor);
     });
   });
+  setupScoreTooltips();
   if (!items.some((c) => c.id === selectedConferenceId)) selectedConferenceId = items[0]?.id;
+}
+
+function setupScoreTooltips() {
+  let tooltip = $("#scoreTooltipPortal");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = "scoreTooltipPortal";
+    tooltip.className = "score-tooltip score-tooltip-portal";
+    tooltip.setAttribute("role", "tooltip");
+    document.body.appendChild(tooltip);
+  }
+  const show = (trigger) => {
+    tooltip.textContent = trigger.dataset.scoreRationale || "";
+    tooltip.classList.add("visible");
+    const triggerRect = trigger.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const left = Math.max(12, Math.min(window.innerWidth - tooltipRect.width - 12, triggerRect.left));
+    const roomAbove = triggerRect.top - tooltipRect.height - 10;
+    const top = roomAbove >= 12 ? roomAbove : triggerRect.bottom + 10;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${Math.min(top, window.innerHeight - tooltipRect.height - 12)}px`;
+  };
+  const hide = () => tooltip.classList.remove("visible");
+  $$(".score-with-tooltip").forEach((trigger) => {
+    trigger.addEventListener("mouseenter", () => show(trigger));
+    trigger.addEventListener("mouseleave", hide);
+    trigger.addEventListener("focus", () => show(trigger));
+    trigger.addEventListener("blur", hide);
+  });
+  window.addEventListener("scroll", hide, { passive: true, once: true });
 }
 
 function toggleRowActionMenu(button) {
@@ -1664,23 +1741,28 @@ function relationshipKey(group) {
 }
 
 function renderArcSummary(slot, summary, trigger = slot.previousElementSibling) {
+  const group = decodeLeadGroup(slot.dataset.summarySlot);
+  if (group.length) hiddenRelationshipSummaries.delete(relationshipKey(group));
   slot.innerHTML = `<div class="ai-summary-head">
     <strong>AI summary</strong>
     <button class="ai-summary-close" type="button" aria-label="Hide AI summary" title="Hide AI summary">&times;</button>
   </div>
   <span>${escapeHtml(summary)}</span>`;
   if (trigger) {
-    trigger.textContent = "Hide AI summary";
+    trigger.textContent = "Generate AI summary";
     trigger.setAttribute("aria-expanded", "true");
+    trigger.disabled = true;
   }
   slot.querySelector(".ai-summary-close")?.addEventListener("click", () => hideArcSummary(slot, trigger));
 }
 
 function hideArcSummary(slot, trigger = slot.previousElementSibling) {
+  const group = decodeLeadGroup(slot.dataset.summarySlot);
+  if (group.length) hiddenRelationshipSummaries.add(relationshipKey(group));
   slot.innerHTML = "";
   if (trigger) {
-    trigger.textContent = "Generate AI summary";
     trigger.setAttribute("aria-expanded", "false");
+    trigger.disabled = false;
   }
 }
 
@@ -1690,7 +1772,9 @@ function rehydrateRelationshipSummaries() {
   $$("[data-summary-slot]").forEach((slot) => {
     const group = decodeLeadGroup(slot.dataset.summarySlot);
     if (group.length < 2) return;
-    const cached = relationshipSummaryCache.get(relationshipKey(group));
+    const key = relationshipKey(group);
+    if (hiddenRelationshipSummaries.has(key)) return;
+    const cached = relationshipSummaryCache.get(key);
     if (cached) renderArcSummary(slot, cached);
   });
 }
@@ -1703,10 +1787,7 @@ async function summarizeRelationshipArc(encodedIds, button) {
   if (group.length < 2) return;
   const slot = button.closest(".relationship")?.querySelector(".relationship-ai-summary");
   if (!slot) return;
-  if (slot.childElementCount) {
-    hideArcSummary(slot, button);
-    return;
-  }
+  if (slot.childElementCount) return;
   const key = relationshipKey(group);
   if (relationshipSummaryCache.has(key)) {
     renderArcSummary(slot, relationshipSummaryCache.get(key), button);
@@ -1723,7 +1804,6 @@ async function summarizeRelationshipArc(encodedIds, button) {
   }
   relationshipSummaryCache.set(key, summary);
   renderArcSummary(slot, summary, button);
-  button.disabled = false;
 }
 
 async function summarizeArcWithAi(group) {
