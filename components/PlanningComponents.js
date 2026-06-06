@@ -12,7 +12,6 @@ function renderCalendarEvent(event) {
 
 function renderTripCluster(cluster) {
   const committedCount = cluster.events.filter((event) => event.status === "Committed").length;
-  const pendingEvents = cluster.events.filter((event) => event.status !== "Committed");
   const potential = cluster.events.reduce((sum, event) => sum + scoreConference(event), 0);
   const windowDays = clusterWindowDays(cluster.events);
   const itineraryGap = clusterItineraryGap(cluster.events);
@@ -25,19 +24,21 @@ function renderTripCluster(cluster) {
     <div class="cluster-events">
       ${cluster.events.map(renderClusterEvent).join("")}
     </div>
-    ${(pendingEvents.length || itineraryGap) ? `<div class="cluster-actions">
-      ${pendingEvents.map((event) => `<button class="add-trip-button" type="button" data-add-to-trip="${event.id}">Add to Trip: ${escapeHtml(event.name)}</button>`).join("")}
-      ${itineraryGap ? `<button class="add-trip-button trip-gap-scout-button" type="button" data-fill-trip-gap data-cluster-region="${escapeHtml(clusterScoutRegion(cluster))}" data-gap-start="${escapeHtml(itineraryGap.start)}" data-gap-end="${escapeHtml(itineraryGap.end)}">&#10024; Fill Trip Gap via AI Scout</button>` : ""}
+    ${itineraryGap ? `<div class="cluster-actions">
+      <button class="add-trip-button trip-gap-scout-button" type="button" data-fill-trip-gap data-cluster-region="${escapeHtml(clusterScoutRegion(cluster))}" data-gap-start="${escapeHtml(itineraryGap.start)}" data-gap-end="${escapeHtml(itineraryGap.end)}">&#10024; Find matching cluster events via AI Scout</button>
     </div>` : ""}
   </div>`;
 }
 
 function renderClusterEvent(event) {
   const committed = event.status === "Committed";
-  return `<span class="cluster-event ${committed ? "cluster-event-committed" : "cluster-event-pending"}">
+  return `<div class="cluster-event ${committed ? "cluster-event-committed" : "cluster-event-pending"}">
     <span>${escapeHtml(event.name)}</span>
     <small>${escapeHtml(formatDateRange(event))} | ${escapeHtml(event.city)}</small>
-  </span>`;
+    ${committed
+      ? '<span class="cluster-commit-confirmation">&#10003; Committed</span>'
+      : `<button class="cluster-inline-add" type="button" data-add-to-trip="${event.id}">Add to Trip: ${escapeHtml(event.name)}</button>`}
+  </div>`;
 }
 
 function clusterWindowDays(events) {

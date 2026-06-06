@@ -1,9 +1,9 @@
 const STORAGE_KEY = "grain-conference-os";
-const DEFAULT_AI_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_API_BASE_URL = "https://api.openai.com/v1";
 const SIDEBAR_KEY = "grain-conference-sidebar";
 const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 380;
-const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist", "Pending", "Uncommitted"];
+const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist"];
 const TEAM_OPTIONS = ["Maya", "Noah", "Lior", "Dana", "Alex"];
 const DEFAULT_SCORE_WEIGHTS = {
   industryFit: 80,

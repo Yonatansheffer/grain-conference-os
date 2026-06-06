@@ -942,6 +942,11 @@ tbody tr:hover {
   text-decoration: none;
 }
 
+.conference-source-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .conference-source-link:hover,
 .detail-title-link:hover {
   color: var(--primary);
@@ -1363,7 +1368,32 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
-.calendar-actions span {
+.calendar-commit-toggle {
+  display: inline-flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 7px;
+  margin-right: 4px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.calendar-commit-toggle input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.calendar-commit-toggle span {
+  min-width: 0;
+  color: inherit;
+  font-weight: inherit;
+}
+
+.calendar-actions > span {
   min-width: 132px;
   text-align: center;
   color: var(--ink);
@@ -1805,6 +1835,32 @@ tbody tr:hover {
   opacity: 0.76;
 }
 
+.cluster-inline-add {
+  justify-self: start;
+  max-width: 100%;
+  border: 1px solid #ddb95e;
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: #fffdf5;
+  color: #77550a;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.3;
+  text-align: left;
+  white-space: normal;
+}
+
+.cluster-inline-add:hover {
+  background: #fff3c9;
+}
+
+.cluster-commit-confirmation {
+  justify-self: start;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .cluster-event-committed {
   border: 1px solid #b9e9f7;
   background: var(--primary-soft);
@@ -1835,6 +1891,18 @@ tbody tr:hover {
 
 .trip-gap-scout-button {
   color: var(--teal);
+}
+
+.settings-inline-error {
+  min-height: 18px;
+  margin: 0;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-inline-error:empty {
+  display: none;
 }
 
 .gap {

@@ -4,6 +4,11 @@ function renderConferenceRow(conference, score, tier) {
     : `<strong>${escapeHtml(conference.name)}</strong>`;
   const rationale = scoreNarrative(conference);
   return `<tr data-id="${conference.id}">
+    <td class="row-actions-cell">
+      <button class="row-delete-button" type="button" data-delete-conference="${conference.id}" data-row-action aria-label="Delete ${escapeHtml(conference.name)}" title="Delete conference">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
+      </button>
+    </td>
     <td>${conferenceName}</td>
     <td>${escapeHtml(formatDateRange(conference))}</td>
     <td><strong>${escapeHtml(conference.region)}</strong><br><span class="muted">${escapeHtml(conference.city)}, ${escapeHtml(conference.country)}</span></td>
@@ -15,11 +20,6 @@ function renderConferenceRow(conference, score, tier) {
       <span class="score-tooltip" id="score-rationale-${conference.id}" role="tooltip">${escapeHtml(rationale)}</span>
     </div></td>
     <td class="status-team-cell">${renderStatusTeamCell(conference)}</td>
-    <td class="row-actions-cell">
-      <button class="row-delete-button" type="button" data-delete-conference="${conference.id}" data-row-action aria-label="Delete ${escapeHtml(conference.name)}" title="Delete conference">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
-      </button>
-    </td>
   </tr>`;
 }
 

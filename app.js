@@ -5,6 +5,7 @@ let filterState = { vertical: [], region: [], status: [] };
 let opportunityFilter = null;
 let sortState = { key: "score", direction: "desc" };
 let calendarDate = new Date("2026-06-01T00:00:00");
+let calendarCommittedOnly = false;
 let clusterConfig = { regions: [], windowDays: 10 };
 let visibleGapSegments = ["Fintech", "Payments", "Treasury"];
 let scoutState = { gap: null, results: [], loading: false, resolvedGapKey: "" };
@@ -33,7 +34,7 @@ function loadState() {
   return {
     conferences: clone(CONFERENCES),
     leads: clone(LEADS),
-    ai: { key: "", model: "gpt-4o-mini", baseUrl: DEFAULT_AI_BASE_URL },
+    ai: { key: "", model: "" },
     hubspot: { token: "" },
     scoringWeights: clone(DEFAULT_SCORE_WEIGHTS)
   };
@@ -41,16 +42,17 @@ function loadState() {
 
 function migrateState(loaded) {
   loaded = loaded || {};
-  loaded.ai = loaded.ai || { key: "", model: "gpt-4o-mini" };
-  loaded.ai.model = loaded.ai.model || "gpt-4o-mini";
-  loaded.ai.baseUrl = loaded.ai.baseUrl || DEFAULT_AI_BASE_URL;
+  loaded.ai = loaded.ai || { key: "", model: "" };
+  loaded.ai.model = loaded.ai.model || (loaded.ai.key ? "gpt-4o-mini" : "");
+  delete loaded.ai.baseUrl;
   loaded.hubspot = loaded.hubspot || { token: "", lastSuccessfulSync: "" };
   loaded.hubspot.lastSuccessfulSync = loaded.hubspot.lastSuccessfulSync || "";
   loaded.scoringWeights = migrateScoringWeights(loaded.scoringWeights);
   loaded.conferences = (Array.isArray(loaded.conferences) ? loaded.conferences : clone(CONFERENCES)).map((conference) => {
-    if (Array.isArray(conference.team)) return conference;
+    const status = ["Pending", "Uncommitted"].includes(conference.status) ? "Considering" : conference.status;
+    if (Array.isArray(conference.team)) return { ...conference, status };
     const team = conference.owner && conference.owner !== "Unassigned" ? [conference.owner] : [];
-    return { ...conference, team };
+    return { ...conference, status, team };
   });
   loaded.leads = Array.isArray(loaded.leads) ? loaded.leads : clone(LEADS);
   return loaded;
@@ -435,6 +437,10 @@ function setupPlanningControls() {
     calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
     renderPlanning();
   });
+  $("#calendarCommittedOnly").addEventListener("change", (event) => {
+    calendarCommittedOnly = event.currentTarget.checked;
+    renderCalendar();
+  });
   $("#clusterWindow").addEventListener("input", (event) => {
     const value = Number(event.currentTarget.value);
     clusterConfig.windowDays = Math.max(1, Math.min(90, Number.isFinite(value) ? value : 10));
@@ -444,15 +450,9 @@ function setupPlanningControls() {
   $("#scoutMic")?.addEventListener("click", toggleScoutVoicePrompt);
 }
 
-// Single place that talks to the model. The endpoint base is user-configurable
-// (OpenAI, Azure OpenAI, or any OpenAI-compatible gateway) so lead data never has
-// to leave an approved provider — important for a fintech/treasury buyer.
-function aiBaseUrl() {
-  return (state.ai.baseUrl || DEFAULT_AI_BASE_URL).trim().replace(/\/+$/, "");
-}
-
+// Single place that talks to the selected OpenAI model.
 async function aiChat(messages, { json = false } = {}) {
-  const response = await fetch(`${aiBaseUrl()}/chat/completions`, {
+  const response = await fetch(`${DEFAULT_API_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -798,7 +798,7 @@ async function transcribeScoutAudio() {
   const formData = new FormData();
   formData.append("model", "whisper-1");
   formData.append("file", audioBlob, "pipeline-scout.webm");
-  const response = await fetch(`${aiBaseUrl()}/audio/transcriptions`, {
+  const response = await fetch(`${DEFAULT_API_BASE_URL}/audio/transcriptions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${state.ai.key}` },
     body: formData
@@ -932,7 +932,7 @@ function deleteConference(id) {
   const conference = state.conferences.find((item) => item.id === id);
   if (!conference) return;
   if (conference.status === "Committed") {
-    showToast("Cannot delete a committed conference. Please change the status to Pending or Uncommitted first.", "warning", { duration: 5200 });
+    showToast("Cannot delete a committed conference. Please change the status to Considering or Watchlist first.", "warning", { duration: 5200 });
     return;
   }
   if (!window.confirm(`Delete ${conference.name}? This cannot be undone.`)) return;
@@ -1437,7 +1437,8 @@ function renderCalendar() {
   const blanks = first.getDay();
   const monthEvents = state.conferences.filter((event) => {
     const eventDate = new Date(event.startDate + "T00:00:00");
-    return eventDate.getFullYear() === year && eventDate.getMonth() === month;
+    const inMonth = eventDate.getFullYear() === year && eventDate.getMonth() === month;
+    return inMonth && (!calendarCommittedOnly || event.status === "Committed");
   });
   const cells = [];
   for (let i = 0; i < blanks; i += 1) cells.push(`<div class="calendar-day empty"></div>`);
@@ -2188,18 +2189,17 @@ async function pushHubspot() {
 
 function setupSettings() {
   $("#aiKey").value = state.ai.key || "";
-  $("#aiModel").value = state.ai.model || "gpt-4o-mini";
-  if ($("#aiBaseUrl")) $("#aiBaseUrl").value = state.ai.baseUrl || DEFAULT_AI_BASE_URL;
+  const savedModels = state.ai.key && state.ai.model ? [state.ai.model] : [];
+  populateAiModelSelect(savedModels, state.ai.model);
   $("#hubspotToken").value = state.hubspot.token || "";
   renderSettingsStatus();
   renderWeightControls();
-  $("#saveAi").addEventListener("click", () => {
-    state.ai.key = $("#aiKey").value.trim();
-    state.ai.model = $("#aiModel").value.trim() || "gpt-4o-mini";
-    state.ai.baseUrl = ($("#aiBaseUrl")?.value || "").trim() || DEFAULT_AI_BASE_URL;
+  $("#saveAi").addEventListener("click", saveKeyAndLoadModels);
+  $("#aiModel").addEventListener("change", (event) => {
+    if (!event.currentTarget.value) return;
+    state.ai.model = event.currentTarget.value;
     saveState();
-    renderSettingsStatus();
-    showToast("AI settings saved in this browser.", "success");
+    showToast(`AI model set to ${state.ai.model}.`, "success");
   });
   $("#saveHubspot").addEventListener("click", () => {
     state.hubspot.token = $("#hubspotToken").value.trim();
@@ -2212,8 +2212,67 @@ function setupSettings() {
   $("#aiSummaries").addEventListener("click", generateAiSummaries);
 }
 
+async function saveKeyAndLoadModels() {
+  const key = $("#aiKey").value.trim();
+  const button = $("#saveAi");
+  const error = $("#aiModelError");
+  error.textContent = "";
+  if (!key) {
+    clearAiModelSelect();
+    error.textContent = "Could not fetch models. Please check your API key.";
+    return;
+  }
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Loading models...";
+  try {
+    const response = await fetch(`${DEFAULT_API_BASE_URL}/models`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${key}` }
+    });
+    if (!response.ok) throw new Error("Model request failed");
+    const payload = await response.json();
+    const modelIds = [...new Set((Array.isArray(payload.data) ? payload.data : [])
+      .map((model) => String(model?.id || "").trim())
+      .filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    if (!modelIds.length) throw new Error("No models returned");
+    const selectedModel = modelIds.includes(state.ai.model)
+      ? state.ai.model
+      : (modelIds.includes("gpt-4o-mini") ? "gpt-4o-mini" : modelIds[0]);
+    state.ai = { key, model: selectedModel };
+    saveState();
+    populateAiModelSelect(modelIds, selectedModel);
+    renderSettingsStatus();
+    showToast("API key validated. Models loaded.", "success");
+  } catch (fetchError) {
+    state.ai = { key: "", model: "" };
+    saveState();
+    clearAiModelSelect();
+    error.textContent = "Could not fetch models. Please check your API key.";
+    renderSettingsStatus();
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+}
+
+function populateAiModelSelect(modelIds, selectedModel = "") {
+  const select = $("#aiModel");
+  if (!select) return;
+  const models = Array.isArray(modelIds) ? modelIds.filter(Boolean) : [];
+  select.innerHTML = models.length
+    ? models.map((id) => `<option value="${escapeHtml(id)}" ${id === selectedModel ? "selected" : ""}>${escapeHtml(id)}</option>`).join("")
+    : '<option value="">Load models after saving a valid key</option>';
+  select.disabled = !models.length;
+}
+
+function clearAiModelSelect() {
+  populateAiModelSelect([], "");
+}
+
 function renderSettingsStatus() {
-  const hasAiKey = Boolean(($("#aiKey")?.value || state.ai.key || "").trim());
+  const hasAiKey = Boolean((state.ai.key || "").trim());
   const hasHubspotToken = Boolean(($("#hubspotToken")?.value || state.hubspot.token || "").trim());
   const aiBadge = $("#aiStatusBadge");
   const hubspotBadge = $("#hubspotStatusBadge");

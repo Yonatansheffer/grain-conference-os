@@ -71,6 +71,7 @@
             <table>
               <thead>
                 <tr>
+                  <th>Actions</th>
                   <th><button class="sort-button" type="button" data-sort="name">Conference</button></th>
                   <th><button class="sort-button" type="button" data-sort="date">Date</button></th>
                   <th><button class="sort-button" type="button" data-sort="location">Location</button></th>
@@ -78,7 +79,6 @@
                   <th><button class="sort-button" type="button" data-sort="audience">Audience</button></th>
                   <th><button class="sort-button" type="button" data-sort="score">ICP / Tier</button></th>
                   <th><button class="sort-button" type="button" data-sort="status">Status / Team</button></th>
-                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="conferenceRows"></tbody>
@@ -116,6 +116,10 @@
               <div class="panel-head">
                 <h3>Event Calendar</h3>
                 <div class="calendar-actions">
+                  <label class="calendar-commit-toggle">
+                    <input id="calendarCommittedOnly" type="checkbox">
+                    <span>Show Committed Only</span>
+                  </label>
                   <button id="calendarPrev" class="ghost-button" type="button">Prev</button>
                   <span id="calendarLabel"></span>
                   <button id="calendarNext" class="ghost-button" type="button">Next</button>
@@ -306,20 +310,17 @@
                 <p class="muted">Optional. Without a key, the app uses transparent local heuristics. With a key, it drafts relationship summaries and follow-ups from lead notes.</p>
                 <div class="settings-fields">
                   <label>
-                    OpenAI-compatible API key
+                    OpenAI API key
                     <input id="aiKey" type="password" autocomplete="current-password" placeholder="Stored only in this browser">
                   </label>
                   <label>
                     Model
-                    <input id="aiModel" value="gpt-4o-mini">
+                    <select id="aiModel"></select>
                   </label>
-                  <label>
-                    API base URL
-                    <input id="aiBaseUrl" placeholder="https://api.openai.com/v1">
-                  </label>
+                  <p id="aiModelError" class="settings-inline-error" role="alert"></p>
                 </div>
               </div>
-              <button id="saveAi" class="primary-button settings-save-button">Save AI settings</button>
+              <button id="saveAi" class="primary-button settings-save-button">Save key and load models</button>
             </div>
             <div class="panel settings-card hubspot-settings-card">
               <div class="settings-config">
