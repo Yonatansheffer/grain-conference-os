@@ -3,9 +3,9 @@ function renderConferenceRow(conference, score, tier) {
     <td><strong>${escapeHtml(conference.name)}</strong></td>
     <td>${escapeHtml(formatDateRange(conference))}</td>
     <td><strong>${escapeHtml(conference.region)}</strong><br><span class="muted">${escapeHtml(conference.city)}, ${escapeHtml(conference.country)}</span></td>
-    <td><div class="vertical-pill-group">${conference.verticals.map((vertical) => `<span class="vertical-pill">${escapeHtml(vertical)}</span>`).join("")}</div></td>
+    <td><div class="vertical-pill-group">${conference.verticals.map((vertical) => `<span class="vertical-pill ${verticalPillClass(vertical)}">${escapeHtml(vertical)}</span>`).join("")}</div></td>
     <td>${conference.audience.toLocaleString()}</td>
-    <td><div class="score"><strong>${score} <span class="pill tier-${tier.toLowerCase()}">Tier ${tier}</span></strong><div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div></div></td>
+    <td><div class="score"><strong>${score} <span class="pill tier-${tier.toLowerCase()}">Tier ${tier}</span></strong><div class="score-bar"><div class="score-fill score-fill-tier-${tier.toLowerCase()}" style="width:${score}%"></div></div></div></td>
     <td>${renderTeamSelect(conference)}</td>
     <td>${renderStatusSelect(conference)}</td>
   </tr>`;

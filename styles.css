@@ -388,6 +388,8 @@ button {
   position: relative;
   padding: 16px;
   min-height: 112px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 .metric strong {
@@ -445,7 +447,11 @@ button {
   grid-template-columns: 2fr repeat(3, minmax(130px, 1fr));
   gap: 12px;
   align-items: end;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  background: var(--slate-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
 }
 
 .table-actions {
@@ -761,6 +767,49 @@ tbody tr:hover {
   white-space: nowrap;
 }
 
+/* Semantic category palette: soft pastel fill + darker text for scannability. */
+.pill-cat-payments {
+  background: #e2f0ff;
+  color: #0b5a8a;
+  border-color: #c7e2fb;
+}
+
+.pill-cat-fintech {
+  background: #ecebff;
+  color: #4338a8;
+  border-color: #d9d6fb;
+}
+
+.pill-cat-travel {
+  background: #def6ee;
+  color: #136b54;
+  border-color: #c4ecdf;
+}
+
+.pill-cat-fx {
+  background: #fff0d6;
+  color: #946200;
+  border-color: #f6e0b0;
+}
+
+.pill-cat-risk {
+  background: #ffe6e0;
+  color: #a13a2a;
+  border-color: #f7cfc6;
+}
+
+.pill-cat-saas {
+  background: #eef1f4;
+  color: #44535e;
+  border-color: #dde3e8;
+}
+
+.pill-cat-neutral {
+  background: #f1f5f4;
+  color: #334e5a;
+  border-color: #dfe7e5;
+}
+
 .tier-a {
   background: var(--primary-soft);
   color: var(--primary);
@@ -813,6 +862,19 @@ tbody tr:hover {
 .score-fill {
   height: 100%;
   background: var(--primary);
+  transition: width 0.3s ease;
+}
+
+.score-fill-tier-a {
+  background: var(--primary);
+}
+
+.score-fill-tier-b {
+  background: var(--blue);
+}
+
+.score-fill-tier-c {
+  background: var(--gold);
 }
 
 .table-select {
@@ -2224,7 +2286,7 @@ button:disabled {
 
 .metric:hover {
   transform: translateY(-2px);
-  box-shadow: 0 22px 56px rgba(89, 68, 37, 0.12);
+  box-shadow: 0 10px 18px -4px rgba(0, 0, 0, 0.1);
 }
 
 /* ---- Accessible keyboard focus ---- */

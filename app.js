@@ -854,17 +854,18 @@ function sortValue(c, key) {
 
 function renderMetrics(items) {
   const committed = items.filter((c) => c.status === "Committed");
+  const considering = items.filter((c) => c.status === "Considering").length;
   const tierA = items.filter((c) => tierFor(scoreConference(c)) === "A").length;
-  const audience = items
-    .filter((c) => CONFIRMED_STATUSES.includes(c.status))
-    .reduce((sum, c) => sum + c.audience, 0);
+  const confirmedReach = items.filter((c) => CONFIRMED_STATUSES.includes(c.status));
+  const audience = confirmedReach.reduce((sum, c) => sum + c.audience, 0);
+  const total = items.length || 1;
   $("#metrics").innerHTML = [
-    ["Events", items.length],
-    ["Tier A targets", tierA],
-    ["Committed", committed.length],
-    ["Reach", audience.toLocaleString()]
+    ["Events", items.length, `${considering} considering coverage`],
+    ["Tier A targets", tierA, `${Math.round((tierA / total) * 100)}% of the shortlist`],
+    ["Committed", committed.length, `${items.length - committed.length} still open`],
+    ["Reach", audience.toLocaleString(), `${confirmedReach.length} approved event${confirmedReach.length === 1 ? "" : "s"}`]
   ]
-    .map(([label, value]) => renderMetricCard(label, value))
+    .map(([label, value, sub]) => renderMetricCard(label, value, sub))
     .join("");
 }
 

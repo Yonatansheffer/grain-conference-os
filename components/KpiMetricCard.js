@@ -5,11 +5,11 @@ const METRIC_ICONS = {
   Reach: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM2 12h20M12 2a12 12 0 0 1 0 20M12 2a12 12 0 0 0 0 20"/></svg>`
 };
 
-function renderMetricCard(label, value) {
+function renderMetricCard(label, value, sub = "") {
   return `<div class="metric">
     <span class="metric-icon">${METRIC_ICONS[label]}</span>
     <strong>${value}</strong>
     <span>${label}</span>
-    ${label === "Reach" ? `<small>From approved attendance only</small>` : ""}
+    ${sub ? `<small>${sub}</small>` : ""}
   </div>`;
 }

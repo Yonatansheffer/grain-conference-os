@@ -54,3 +54,18 @@ function teamLabel(conference) {
 function domainFromLead(lead) {
   return lead.email?.split("@")[1]?.toLowerCase() || "";
 }
+
+// Maps a vertical/category label to one of a small set of semantic palette
+// classes so tags read by color, not just text. Keeps scannability consistent
+// wherever category pills render.
+function verticalPillClass(label) {
+  const value = String(label || "").toLowerCase();
+  if (/(travel|tourism|airline|hospitality|wholesale)/.test(value)) return "pill-cat-travel";
+  if (/(payment|merchant|retail|psp|acquir)/.test(value)) return "pill-cat-payments";
+  if (/(fx|treasur|currency)/.test(value)) return "pill-cat-fx";
+  if (/(fraud|risk|regtech|compliance)/.test(value)) return "pill-cat-risk";
+  if (/(fintech|bank|embedded|finance|policy)/.test(value)) return "pill-cat-fintech";
+  if (/(saas|tech|software|platform)/.test(value)) return "pill-cat-saas";
+  return "pill-cat-neutral";
+}
+
