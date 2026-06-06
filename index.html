@@ -267,7 +267,6 @@
 
               <div class="capture-actions">
                 <button class="primary-button" type="submit">Save lead</button>
-                <button id="exportCsv" class="ghost-button" type="button">Export HubSpot CSV</button>
               </div>
             </div>
 
@@ -288,6 +287,20 @@
               </div>
             </div>
           </form>
+          <div class="panel lead-registry-hub">
+            <div class="lead-registry-head">
+              <div>
+                <span class="eyebrow">Lead Directory</span>
+                <h3>View Current Lead Registry &amp; Export CSV</h3>
+                <p class="muted">Review the active lead pipeline matrix and export the current registry for HubSpot.</p>
+              </div>
+              <button id="exportCsv" class="ghost-button export-button" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg>
+                <span>Export CSV</span>
+              </button>
+            </div>
+            <div id="leadRegistry" class="lead-registry"></div>
+          </div>
         </section>
 
         <section id="relationships" class="view">
@@ -433,9 +446,13 @@
               <input id="newConferenceAudience" type="number" min="100" step="100" value="2500" required>
             </label>
           </div>
-          <div class="two-col">
+          <div class="two-col conference-source-row">
             <label>
               Team members
+              <div class="multi-select-actions" data-native-multi-actions="newConferenceTeam">
+                <button type="button" data-native-select-all>Select All</button>
+                <button type="button" data-native-clear-all>Clear All</button>
+              </div>
               <select id="newConferenceTeam" multiple size="4">
                 <option>Maya</option>
                 <option>Noah</option>
@@ -450,13 +467,14 @@
               <input id="newConferenceSource" type="url" placeholder="https://">
             </label>
           </div>
+          <p class="score-methodology">Rate each dynamic parameter on a standardized scale from 1 (Lowest Match) to 10 (Highest ICP Alignment) to compute the composite strategic index.</p>
           <div class="score-input-grid">
-            <label>Buyer density <input id="newBuyerDensity" type="number" min="1" max="5" value="4"></label>
-            <label>PSP fit <input id="newPspRelevance" type="number" min="1" max="5" value="4"></label>
-            <label>FX exposure <input id="newFxRelevance" type="number" min="1" max="5" value="4"></label>
-            <label>Travel fit <input id="newTravelRelevance" type="number" min="1" max="5" value="3"></label>
-            <label>Seniority <input id="newSeniority" type="number" min="1" max="5" value="4"></label>
-            <label>Cost tier <input id="newCostTier" type="number" min="1" max="5" value="3"></label>
+            <label>Buyer density <input id="newBuyerDensity" type="number" min="1" max="10" value="8"></label>
+            <label>PSP fit <input id="newPspRelevance" type="number" min="1" max="10" value="8"></label>
+            <label>FX exposure <input id="newFxRelevance" type="number" min="1" max="10" value="8"></label>
+            <label>Travel fit <input id="newTravelRelevance" type="number" min="1" max="10" value="6"></label>
+            <label>Seniority <input id="newSeniority" type="number" min="1" max="10" value="8"></label>
+            <label>Cost tier <input id="newCostTier" type="number" min="1" max="10" value="6"></label>
           </div>
           <div class="modal-actions">
             <button class="ghost-button" type="button" data-close-modal>Cancel</button>

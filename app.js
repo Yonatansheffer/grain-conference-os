@@ -22,6 +22,7 @@ let isRecordingScout = false;
 let scoutMediaRecorder = null;
 let scoutAudioChunks = [];
 let editingConferenceId = "";
+let pendingScoutEventId = "";
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -50,14 +51,25 @@ function migrateState(loaded) {
   loaded.hubspot = loaded.hubspot || { token: "", lastSuccessfulSync: "" };
   loaded.hubspot.lastSuccessfulSync = loaded.hubspot.lastSuccessfulSync || "";
   loaded.scoringWeights = migrateScoringWeights(loaded.scoringWeights);
+  const migrateRatings = loaded.ratingScaleVersion !== 2;
   loaded.conferences = (Array.isArray(loaded.conferences) ? loaded.conferences : clone(CONFERENCES)).map((conference) => {
     const status = ["Pending", "Uncommitted"].includes(conference.status) ? "Considering" : conference.status;
-    if (Array.isArray(conference.team)) return { ...conference, status };
+    const ratings = migrateRatings ? migrateConferenceRatings(conference) : conference;
+    if (Array.isArray(conference.team)) return { ...ratings, status };
     const team = conference.owner && conference.owner !== "Unassigned" ? [conference.owner] : [];
-    return { ...conference, status, team };
+    return { ...ratings, status, team };
   });
+  loaded.ratingScaleVersion = 2;
   loaded.leads = Array.isArray(loaded.leads) ? loaded.leads : clone(LEADS);
   return loaded;
+}
+
+function migrateConferenceRatings(conference) {
+  const ratingKeys = ["seniority", "buyerDensity", "fxRelevance", "travelRelevance", "pspRelevance", "costTier"];
+  return {
+    ...conference,
+    ...Object.fromEntries(ratingKeys.map((key) => [key, Math.max(1, Math.min(10, (Number(conference[key]) || 3) * 2))]))
+  };
 }
 
 function migrateScoringWeights(savedWeights = {}) {
@@ -87,11 +99,11 @@ function scoreConference(c) {
   const weights = { ...DEFAULT_SCORE_WEIGHTS, ...(state.scoringWeights || {}) };
   const totalWeight = Object.values(weights).reduce((sum, value) => sum + clampWeight(value), 0) || 1;
   const reach = Math.min(1, Math.max(0, (Math.log10(Math.max(c.audience || 0, 100)) - 2) / 3));
-  const industryFit = ((c.buyerDensity || 0) / 5) * 0.45 + (Math.max(c.pspRelevance || 0, c.travelRelevance || 0) / 5) * 0.55;
-  const fxExposurePain = (c.fxRelevance || 0) / 5;
-  const decisionMakerSeniority = (c.seniority || 0) / 5;
+  const industryFit = ((c.buyerDensity || 0) / 10) * 0.45 + (Math.max(c.pspRelevance || 0, c.travelRelevance || 0) / 10) * 0.55;
+  const fxExposurePain = (c.fxRelevance || 0) / 10;
+  const decisionMakerSeniority = (c.seniority || 0) / 10;
   const audienceScale = reach;
-  const travelBudgetRoi = ((6 - (c.costTier || 3)) / 5) * 0.65 + ((c.travelRelevance || 0) / 5) * 0.35;
+  const travelBudgetRoi = ((12 - (c.costTier || 6)) / 10) * 0.65 + ((c.travelRelevance || 0) / 10) * 0.35;
   const weightedScore =
     industryFit * clampWeight(weights.industryFit) +
     fxExposurePain * clampWeight(weights.fxExposurePain) +
@@ -315,7 +327,10 @@ function renderClusterRegionFilter(regions) {
   if (!menu || !button) return;
   button.textContent = clusterConfig.regions.length ? `${clusterConfig.regions.length} regions` : "All regions";
   menu.innerHTML = [
-    `<button class="filter-clear" type="button" data-filter-clear="clusterRegion">Clear regions</button>`,
+    `<div class="filter-action-pair">
+      <button class="filter-clear" type="button" data-filter-select-all="clusterRegion">Select All</button>
+      <button class="filter-clear" type="button" data-filter-clear="clusterRegion">Clear All</button>
+    </div>`,
     ...regions.map((region) => renderMultiOption(region, clusterConfig.regions.includes(region)))
   ].join("");
   menu.querySelectorAll("input").forEach((input) => {
@@ -324,6 +339,11 @@ function renderClusterRegionFilter(regions) {
       renderFilters();
       renderPlanning();
     });
+  });
+  menu.querySelector("[data-filter-select-all]")?.addEventListener("click", () => {
+    clusterConfig.regions = [...regions];
+    renderFilters();
+    renderPlanning();
   });
   menu.querySelector("[data-filter-clear]")?.addEventListener("click", () => {
     clusterConfig.regions = [];
@@ -339,7 +359,10 @@ function renderMultiFilter(key, options, pluralLabel) {
   button.classList.toggle("has-selection", selected.length > 0);
   button.textContent = selected.length ? `${selected.length} ${pluralLabel}` : `All ${pluralLabel}`;
   menu.innerHTML = [
-    `<button class="filter-clear" type="button" data-filter-clear="${key}">Clear ${key}</button>`,
+    `<div class="filter-action-pair">
+      <button class="filter-clear" type="button" data-filter-select-all="${key}">Select All</button>
+      <button class="filter-clear" type="button" data-filter-clear="${key}">Clear All</button>
+    </div>`,
     ...options.map((option) => renderMultiOption(option, selected.includes(option)))
   ].join("");
   menu.querySelectorAll("input").forEach((input) => {
@@ -349,6 +372,12 @@ function renderMultiFilter(key, options, pluralLabel) {
       renderFilters();
       renderConferenceRows();
     });
+  });
+  menu.querySelector("[data-filter-select-all]")?.addEventListener("click", () => {
+    opportunityFilter = null;
+    filterState[key] = [...options];
+    renderFilters();
+    renderConferenceRows();
   });
   menu.querySelector("[data-filter-clear]")?.addEventListener("click", () => {
     opportunityFilter = null;
@@ -559,6 +588,7 @@ async function fetchAiScoutResults(prompt) {
           "You are Grain's Proactive AI Pipeline Scout.",
           "Return only JSON with an events array.",
           "Each event must have name, startDate, endDate, city, country, region, verticals, audience, seniority, buyerDensity, fxRelevance, travelRelevance, pspRelevance, costTier, source, and pitchHook.",
+          "All evaluation criteria must use integers from 1 to 10.",
           "Only include realistic conference dates in 2026 or 2027.",
           "Prioritize PSPs, payments, travel wholesalers, CFOs, treasurers, finance leaders, and enterprise FX exposure."
         ].join(" ")
@@ -596,12 +626,12 @@ function localScoutResults(prompt) {
       region: "North America",
       verticals: ["Travel", "Travel Tech", "Wholesalers", "Corporate Travel"],
       audience: 5300,
-      seniority: 4,
-      buyerDensity: 4,
-      fxRelevance: 5,
-      travelRelevance: 5,
-      pspRelevance: 2,
-      costTier: 3,
+      seniority: 8,
+      buyerDensity: 8,
+      fxRelevance: 10,
+      travelRelevance: 10,
+      pspRelevance: 4,
+      costTier: 6,
       source: "https://www.gbta.org/convention",
       pitchHook: "Corporate travel buyers and wholesale operators face live currency-margin exposure across global supplier contracts. Emphasize Grain's automated hedging workflows and forward booking controls."
     },
@@ -614,12 +644,12 @@ function localScoutResults(prompt) {
       region: "North America",
       verticals: ["Travel", "Hospitality", "Airlines", "Wholesalers"],
       audience: 1400,
-      seniority: 5,
-      buyerDensity: 4,
-      fxRelevance: 4,
-      travelRelevance: 5,
-      pspRelevance: 2,
-      costTier: 3,
+      seniority: 10,
+      buyerDensity: 8,
+      fxRelevance: 8,
+      travelRelevance: 10,
+      pspRelevance: 4,
+      costTier: 6,
       source: "https://skift.com/events/",
       pitchHook: "Travel executives are actively comparing margin protection strategies for international inventory. Lead with CFO-level volatility control and faster booking-policy enforcement."
     },
@@ -632,12 +662,12 @@ function localScoutResults(prompt) {
       region: "North America",
       verticals: ["Travel", "Corporate Travel", "SaaS", "Wholesalers"],
       audience: 2200,
-      seniority: 4,
-      buyerDensity: 4,
-      fxRelevance: 4,
-      travelRelevance: 5,
-      pspRelevance: 2,
-      costTier: 2,
+      seniority: 8,
+      buyerDensity: 8,
+      fxRelevance: 8,
+      travelRelevance: 10,
+      pspRelevance: 4,
+      costTier: 4,
       source: "https://www.businesstravelshowamerica.com/",
       pitchHook: "Managed travel and supplier-payment teams are exposed to FX slippage across negotiated global programs. Position Grain as the control layer between forecasted bookings and treasury execution."
     },
@@ -650,12 +680,12 @@ function localScoutResults(prompt) {
       region: "Europe",
       verticals: ["Payments", "Fintech", "Banking"],
       audience: 7400,
-      seniority: 5,
-      buyerDensity: 5,
-      fxRelevance: 5,
-      travelRelevance: 2,
-      pspRelevance: 5,
-      costTier: 4,
+      seniority: 10,
+      buyerDensity: 10,
+      fxRelevance: 10,
+      travelRelevance: 4,
+      pspRelevance: 10,
+      costTier: 8,
       source: "https://europe.money2020.com/",
       pitchHook: "This is already represented in the active directory and should be deduped rather than inserted again."
     }
@@ -696,12 +726,12 @@ function sanitizeScoutEvent(event) {
     region: titleCase(String(event.region || "Global").trim()),
     verticals: Array.isArray(event.verticals) ? event.verticals.map((item) => titleCase(String(item).trim())).filter(Boolean) : ["Travel"],
     audience: Math.max(100, Math.round(Number(event.audience) || 1000)),
-    seniority: clampRating(event.seniority, 4),
-    buyerDensity: clampRating(event.buyerDensity, 4),
-    fxRelevance: clampRating(event.fxRelevance, 4),
-    travelRelevance: clampRating(event.travelRelevance, 4),
-    pspRelevance: clampRating(event.pspRelevance, 2),
-    costTier: clampRating(event.costTier, 3),
+    seniority: clampRating(event.seniority, 8),
+    buyerDensity: clampRating(event.buyerDensity, 8),
+    fxRelevance: clampRating(event.fxRelevance, 8),
+    travelRelevance: clampRating(event.travelRelevance, 8),
+    pspRelevance: clampRating(event.pspRelevance, 4),
+    costTier: clampRating(event.costTier, 6),
     status: "Committed",
     owner: "Unassigned",
     source: String(event.source || "").trim(),
@@ -710,7 +740,7 @@ function sanitizeScoutEvent(event) {
 }
 
 function clampRating(value, fallback) {
-  return Math.max(1, Math.min(5, Math.round(Number(value) || fallback)));
+  return Math.max(1, Math.min(10, Math.round(Number(value) || fallback)));
 }
 
 function validateScoutDate(value) {
@@ -767,17 +797,14 @@ function scoutPitchHook(event) {
 function addScoutEventToDirectory(id) {
   const result = scoutState.results.find((item) => item.event.id === id);
   if (!result || result.duplicate) return;
-  const event = { ...result.event };
-  delete event.pitchHook;
-  state.conferences.push(event);
-  if (scoutState.gap) scoutState.resolvedGapKey = "__all__";
-  scoutState.results = scoutState.results.filter((item) => item.event.id !== id);
-  selectedConferenceId = event.id;
-  saveState();
-  visibleGapSegments = allVerticals();
-  renderFilters();
-  renderAll();
-  $("#scoutStatus").textContent = `${event.name} added to the active directory.`;
+  editingConferenceId = "";
+  pendingScoutEventId = id;
+  populateConferenceForm(result.event);
+  $("#addConferenceTitle").textContent = "Review AI Scout Event";
+  $("#conferenceFormDescription").textContent = "Verify the discovered event data and scoring inputs before adding it to the active directory.";
+  $("#conferenceFormSubmit").textContent = "Add to table";
+  document.querySelector("#addConferenceModal .modal-close")?.setAttribute("aria-label", "Close AI Scout event review");
+  openModal("#addConferenceModal");
 }
 
 function toggleScoutVoicePrompt() {
@@ -979,6 +1006,18 @@ function renderConferenceRows() {
     });
     editor.querySelectorAll("input").forEach((input) => {
       input.addEventListener("change", () => handleTeamEdit(editor));
+    });
+    editor.querySelector("[data-team-select-all]")?.addEventListener("click", () => {
+      editor.querySelectorAll("input").forEach((input) => {
+        input.checked = true;
+      });
+      handleTeamEdit(editor);
+    });
+    editor.querySelector("[data-team-clear-all]")?.addEventListener("click", () => {
+      editor.querySelectorAll("input").forEach((input) => {
+        input.checked = false;
+      });
+      handleTeamEdit(editor);
     });
   });
   if (!items.some((c) => c.id === selectedConferenceId)) selectedConferenceId = items[0]?.id;
@@ -1384,10 +1423,13 @@ function renderScoutResultCard(result) {
   const score = scoreConference(event);
   const tier = tierFor(score);
   const duplicate = result.duplicate;
+  const eventTitle = event.source
+    ? `<a class="scout-title-link" href="${escapeHtml(event.source)}" target="_blank" rel="noreferrer">${escapeHtml(event.name)}</a>`
+    : `<strong>${escapeHtml(event.name)}</strong>`;
   return `<div class="scout-card ${duplicate ? "scout-card-duplicate" : ""}">
     <div class="scout-card-head">
       <div>
-        <strong>${escapeHtml(event.name)}</strong>
+        ${eventTitle}
         <span>${escapeHtml(formatDateRange(event))} | ${escapeHtml(event.city)}, ${escapeHtml(event.country)}</span>
       </div>
       <span class="tier-flag tier-${tier.toLowerCase()}">Tier ${tier} - Score: ${score}</span>
@@ -1411,7 +1453,10 @@ function renderGapSegmentFilter(verticals) {
   button.textContent = selected.length === verticals.length ? "All verticals" : `${selected.length} verticals`;
   button.classList.toggle("has-selection", selected.length !== verticals.length);
   menu.innerHTML = [
-    `<button class="filter-clear" type="button" data-gap-segment-all>Show all verticals</button>`,
+    `<div class="filter-action-pair">
+      <button class="filter-clear" type="button" data-gap-segment-all>Select All</button>
+      <button class="filter-clear" type="button" data-gap-segment-clear>Clear All</button>
+    </div>`,
     ...verticals.map((vertical) => renderMultiOption(vertical, selected.includes(vertical)))
   ].join("");
   menu.querySelectorAll("input").forEach((input) => {
@@ -1422,6 +1467,10 @@ function renderGapSegmentFilter(verticals) {
   });
   menu.querySelector("[data-gap-segment-all]")?.addEventListener("click", () => {
     visibleGapSegments = [...verticals];
+    renderPlanning();
+  });
+  menu.querySelector("[data-gap-segment-clear]")?.addEventListener("click", () => {
+    visibleGapSegments = [];
     renderPlanning();
   });
 }
@@ -1823,7 +1872,6 @@ function inferVertical(text) {
 }
 
 function applyParsedLead(parsed, raw) {
-  const fullName = [parsed.firstName, parsed.lastName].filter(Boolean).join(" ");
   if (!parsed.firstName && !parsed.lastName && parsed.name) {
     const parts = String(parsed.name).trim().split(/\s+/);
     parsed.firstName = parts[0] || "";
@@ -1841,8 +1889,14 @@ function applyParsedLead(parsed, raw) {
   const sentiment = ["Strong", "Medium", "Weak"].includes(parsed.sentiment) ? parsed.sentiment : "Medium";
   $(`input[name='sentiment'][value='${sentiment}']`).checked = true;
   $("#nextStep").value = parsed.nextStep || "";
-  const extractedNotes = [...new Set([parsed.painPoints, parsed.notes].filter(Boolean).map((item) => String(item).trim()))].join(" ");
-  $("#notes").value = `${extractedNotes ? `${extractedNotes}\n\n` : ""}Raw floor scribble: ${raw}`;
+  $("#notes").value = cleanScribblePayload(raw);
+}
+
+function cleanScribblePayload(raw) {
+  return String(raw || "")
+    .replace(/^\s*raw floor scribble\s*:\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function guessConferenceId(raw) {
@@ -2135,6 +2189,19 @@ function downloadCsv(rows, filename) {
 function setupConferenceActions() {
   $("#exportConferencesCsv").addEventListener("click", exportConferencesCsv);
   $("#addConferenceForm").addEventListener("submit", submitConferenceForm);
+  $$("[data-native-multi-actions]").forEach((controls) => {
+    const select = document.getElementById(controls.dataset.nativeMultiActions);
+    controls.querySelector("[data-native-select-all]")?.addEventListener("click", () => {
+      Array.from(select?.options || []).forEach((option) => {
+        option.selected = true;
+      });
+    });
+    controls.querySelector("[data-native-clear-all]")?.addEventListener("click", () => {
+      Array.from(select?.options || []).forEach((option) => {
+        option.selected = false;
+      });
+    });
+  });
   $$("[data-close-modal]").forEach((button) => {
     button.addEventListener("click", () => closeModals());
   });
@@ -2154,16 +2221,45 @@ function setupConferenceActions() {
   });
 }
 
+function renderLeadRegistry() {
+  const container = $("#leadRegistry");
+  if (!container) return;
+  if (!state.leads.length) {
+    container.innerHTML = "<div class='empty-state'><strong>No leads captured yet.</strong><span>Saved leads will appear here for review and export.</span></div>";
+    return;
+  }
+  container.innerHTML = `<div class="lead-registry-table-wrap">
+    <table class="lead-registry-table">
+      <thead>
+        <tr><th>Contact</th><th>Company</th><th>Conference</th><th>Signal</th><th>Next Step</th></tr>
+      </thead>
+      <tbody>
+        ${[...state.leads].reverse().map((lead) => {
+          const conference = state.conferences.find((item) => item.id === lead.conferenceId);
+          return `<tr>
+            <td><strong>${escapeHtml([lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed lead")}</strong><small>${escapeHtml(lead.email || lead.phone || "No contact detail")}</small></td>
+            <td>${escapeHtml(lead.company || "Unknown")}</td>
+            <td>${escapeHtml(conference?.name || "Unknown event")}</td>
+            <td><span class="lead-signal lead-signal-${normalize(lead.sentiment || "medium")}">${escapeHtml(lead.sentiment || "Medium")}</span></td>
+            <td>${escapeHtml(lead.nextStep || "Not set")}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  </div>`;
+}
+
 function openAddConferenceForm() {
   editingConferenceId = "";
+  pendingScoutEventId = "";
   $("#addConferenceForm").reset();
   $("#newConferenceAudience").value = "2500";
-  $("#newBuyerDensity").value = "4";
-  $("#newPspRelevance").value = "4";
-  $("#newFxRelevance").value = "4";
-  $("#newTravelRelevance").value = "3";
-  $("#newSeniority").value = "4";
-  $("#newCostTier").value = "3";
+  $("#newBuyerDensity").value = "8";
+  $("#newPspRelevance").value = "8";
+  $("#newFxRelevance").value = "8";
+  $("#newTravelRelevance").value = "6";
+  $("#newSeniority").value = "8";
+  $("#newCostTier").value = "6";
   $("#addConferenceTitle").textContent = "Add Conference";
   $("#conferenceFormDescription").textContent = "Create a new event row with enough context to score, filter, and plan coverage.";
   $("#conferenceFormSubmit").textContent = "Add to table";
@@ -2175,7 +2271,17 @@ function openEditConferenceForm(id) {
   const conference = state.conferences.find((item) => item.id === id);
   if (!conference) return;
   editingConferenceId = id;
+  pendingScoutEventId = "";
   closeRowActionMenus();
+  populateConferenceForm(conference);
+  $("#addConferenceTitle").textContent = "Edit Conference";
+  $("#conferenceFormDescription").textContent = "Update this event's directory, scoring, and coverage details.";
+  $("#conferenceFormSubmit").textContent = "Save changes";
+  document.querySelector("#addConferenceModal .modal-close")?.setAttribute("aria-label", "Close edit conference");
+  openModal("#addConferenceModal");
+}
+
+function populateConferenceForm(conference) {
   $("#newConferenceName").value = conference.name || "";
   $("#newConferenceStatus").value = conference.status || "Considering";
   $("#newConferenceStart").value = conference.startDate || "";
@@ -2195,11 +2301,6 @@ function openEditConferenceForm(id) {
   Array.from($("#newConferenceTeam").options).forEach((option) => {
     option.selected = Array.isArray(conference.team) && conference.team.includes(option.value);
   });
-  $("#addConferenceTitle").textContent = "Edit Conference";
-  $("#conferenceFormDescription").textContent = "Update this event's directory, scoring, and coverage details.";
-  $("#conferenceFormSubmit").textContent = "Save changes";
-  document.querySelector("#addConferenceModal .modal-close")?.setAttribute("aria-label", "Close edit conference");
-  openModal("#addConferenceModal");
 }
 
 function submitConferenceForm(event) {
@@ -2235,6 +2336,12 @@ function submitConferenceForm(event) {
   } else {
     state.conferences.push(conference);
   }
+  if (pendingScoutEventId) {
+    scoutState.results = scoutState.results.filter((item) => item.event.id !== pendingScoutEventId);
+    if (scoutState.gap) scoutState.resolvedGapKey = "__all__";
+    visibleGapSegments = allVerticals();
+    $("#scoutStatus").textContent = `${conference.name} added to the active directory.`;
+  }
   selectedConferenceId = conference.id;
   saveState();
   filterState = { vertical: [], region: [], status: [] };
@@ -2245,10 +2352,11 @@ function submitConferenceForm(event) {
   showToast(existingConference ? `${conference.name} updated.` : `${conference.name} added.`, "success");
   if (!existingConference) openConferenceDetail(conference.id);
   editingConferenceId = "";
+  pendingScoutEventId = "";
 }
 
 function boundedScore(selector) {
-  return Math.max(1, Math.min(5, Number($(selector).value) || 3));
+  return Math.max(1, Math.min(10, Number($(selector).value) || 6));
 }
 
 function createConferenceId(name) {
@@ -2527,6 +2635,7 @@ function renderAll() {
   renderConferenceRows();
   renderScoutWorkspace();
   renderPlanning();
+  renderLeadRegistry();
   renderRelationships();
   renderWeightControls();
   renderScoringExplain();

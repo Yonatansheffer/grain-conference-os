@@ -48,6 +48,10 @@ function renderTeamSelect(conference) {
   return `<div class="team-editor" data-id="${conference.id}">
     <button class="table-select team-button" type="button" aria-label="Team for ${escapeHtml(conference.name)}">${escapeHtml(teamLabel(conference))}</button>
     <div class="team-menu">
+      <div class="filter-action-pair">
+        <button class="filter-clear" type="button" data-team-select-all>Select All</button>
+        <button class="filter-clear" type="button" data-team-clear-all>Clear All</button>
+      </div>
       ${TEAM_OPTIONS.map((person) => renderMultiOption(person, team.includes(person))).join("")}
     </div>
   </div>`;
