@@ -823,9 +823,13 @@ function filteredConferences() {
     .filter((c) => !filterState.region.length || filterState.region.includes(c.region))
     .filter((c) => !filterState.status.length || filterState.status.includes(c.status))
     .filter((c) => !opportunityFilter || (
-      c.verticals.includes(opportunityFilter.vertical) &&
-      opportunityFilter.statuses.includes(c.status) &&
-      scoreConference(c) >= opportunityFilter.minScore
+      opportunityFilter.eventIds?.length
+        ? opportunityFilter.eventIds.includes(c.id)
+        : (
+          c.verticals.includes(opportunityFilter.vertical) &&
+          opportunityFilter.statuses.includes(c.status) &&
+          scoreConference(c) >= opportunityFilter.minScore
+        )
     ))
     .sort(compareConferences);
 }
@@ -1198,7 +1202,10 @@ function renderPlanning() {
       .map(renderGapCard)
       .join("");
     $$("[data-gap-opportunities]").forEach((button) => {
-      button.addEventListener("click", () => viewSegmentOpportunities(button.dataset.gapOpportunities));
+      button.addEventListener("click", () => {
+        const eventIds = (button.dataset.gapEventIds || "").split(",").filter(Boolean);
+        viewSegmentOpportunities(button.dataset.gapOpportunities, eventIds);
+      });
     });
     $$("[data-gap-scout]").forEach((button) => {
       button.addEventListener("click", () => resolveSegmentGapViaScout(button.dataset.gapScout));
@@ -1306,17 +1313,25 @@ function renderGapSegmentFilter(verticals) {
 
 function renderGapCard(vertical) {
   const relevant = state.conferences.filter((c) => c.verticals.includes(vertical));
-  const committed = relevant.filter((c) => c.status === "Committed");
+  const committed = relevant.filter((c) => isCommittedConference(c));
+  const uncommitted = relevant.filter((c) => !isCommittedConference(c));
   const avg = relevant.length ? Math.round(relevant.reduce((sum, c) => sum + scoreConference(c), 0) / relevant.length) : 0;
   const ratio = relevant.length ? committed.length / relevant.length : 0;
   const progress = Math.round(ratio * 100);
-  const zeroCoverage = committed.length === 0 || progress === 0;
-  const gap = zeroCoverage || (avg >= 68 && committed.length < 2);
-  const pending = relevant
-    .filter((c) => c.status !== "Committed" && scoreConference(c) >= 68)
-    .sort((a, b) => scoreConference(b) - scoreConference(a));
-  const missedReach = pending.reduce((sum, c) => sum + c.audience, 0);
-  const tone = gap ? (zeroCoverage ? "danger" : "warning") : "healthy";
+  const fullyCovered = committed.length > 0 && uncommitted.length === 0;
+  const dataGap = relevant.length === 0;
+  const highValueUncommitted = uncommitted.filter((c) => scoreConference(c) >= 68);
+  const underInvested = !fullyCovered && !dataGap && (progress < 100 || highValueUncommitted.length > 0);
+  const missedReach = uncommitted.reduce((sum, c) => sum + (Number(c.audience) || 0), 0);
+  const tone = fullyCovered ? "healthy" : (dataGap ? "danger" : (underInvested ? "warning" : "healthy"));
+  const status = gapCardStatus({
+    vertical,
+    fullyCovered,
+    dataGap,
+    underInvested,
+    uncommitted,
+    missedReach
+  });
   return `<div class="gap gap-${tone}">
     <div class="gap-head">
       <strong>${vertical}</strong>
@@ -1326,11 +1341,30 @@ function renderGapCard(vertical) {
       <span style="width:${Math.min(100, progress)}%"></span>
     </div>
     <p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}.</p>
-    <p class="${gap ? "heat" : "muted"}">${zeroCoverage ? "Under-invested: critical pipeline gap." : (gap ? "Under-invested: add coverage or piggyback." : "Coverage looks proportional.")}</p>
-    ${zeroCoverage ? renderSegmentGapAlert(vertical) : ""}
-    ${gap && !zeroCoverage ? `<p class="muted gap-cost">Missing out on ${missedReach.toLocaleString()} potential reach across ${pending.length} pending events.</p>
-      <button class="gap-action" type="button" data-gap-opportunities="${vertical}">View Opportunities</button>` : ""}
+    ${status}
   </div>`;
+}
+
+function isCommittedConference(conference) {
+  return ["Committed", "Approved", "Confirmed", "Booked"].includes(conference?.status);
+}
+
+function gapCardStatus({ vertical, fullyCovered, dataGap, underInvested, uncommitted, missedReach }) {
+  if (fullyCovered) {
+    return `<p class="gap-status gap-status-covered">Fully Covered</p>
+      <p class="muted">All known ${escapeHtml(vertical)} events are covered. Great job!</p>`;
+  }
+  if (dataGap) {
+    return `<p class="gap-status heat">Under-invested: critical pipeline gap.</p>
+      ${renderSegmentGapAlert(vertical)}`;
+  }
+  if (underInvested && uncommitted.length) {
+    const eventIds = uncommitted.map((conference) => conference.id).join(",");
+    return `<p class="gap-status heat">Under-invested: local opportunities available.</p>
+      <p class="muted gap-cost">Missing out on ${missedReach.toLocaleString()} potential reach across ${uncommitted.length} uncommitted events.</p>
+      <button class="gap-action" type="button" data-gap-opportunities="${escapeHtml(vertical)}" data-gap-event-ids="${escapeHtml(eventIds)}">View Opportunities</button>`;
+  }
+  return `<p class="gap-status muted">Coverage looks proportional.</p>`;
 }
 
 function renderSegmentGapAlert(segmentName) {
@@ -1340,17 +1374,19 @@ function renderSegmentGapAlert(segmentName) {
       <h3>&#9888;&#65039; AI Gap Alert</h3>
       <p>0 ${escapeHtml(segmentName)}-related events scheduled for the upcoming period. This creates a critical pipeline risk for our core enterprise ${escapeHtml(segmentName)} target audience.</p>
     </div>
-    <button class="primary-button" type="button" data-gap-scout="${escapeHtml(segmentName)}">&#129668; Resolve Gap via AI Scout</button>
+    <button class="primary-button" type="button" data-gap-scout="${escapeHtml(segmentName)}">&#10024; Run AI Event Discovery</button>
   </div>`;
 }
 
-function viewSegmentOpportunities(vertical) {
+function viewSegmentOpportunities(vertical, eventIds = []) {
+  const specificEvents = state.conferences.filter((conference) => eventIds.includes(conference.id));
+  const statuses = [...new Set(specificEvents.map((conference) => conference.status))];
   filterState = {
     vertical: [vertical],
     region: [],
-    status: ["Considering", "Watchlist"]
+    status: statuses
   };
-  opportunityFilter = { vertical, statuses: ["Considering", "Watchlist"], minScore: 68 };
+  opportunityFilter = { vertical, eventIds };
   sortState = { key: "score", direction: "desc" };
   renderFilters();
   document.querySelector("[data-view='conferences']").click();

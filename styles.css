@@ -1788,6 +1788,14 @@ tbody tr:hover {
   margin: 0;
 }
 
+.gap-status {
+  font-weight: 900;
+}
+
+.gap-status-covered {
+  color: var(--green);
+}
+
 .gap-cost {
   font-size: 12px;
 }
