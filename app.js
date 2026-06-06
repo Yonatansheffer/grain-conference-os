@@ -1386,7 +1386,7 @@ function setupCapture() {
     $("#scribbleStatus").textContent = "";
     $("#sentStrong").checked = true;
     renderAll();
-    alert("Lead saved. Relationship tracking updated.");
+    showToast("Lead saved. Relationship tracking updated.", "success");
   });
 }
 
@@ -1549,13 +1549,13 @@ async function handleNextStep(action, encodedIds, button) {
     qualify: "Budget qualification context copied.",
     nurture: "Nurture task context copied."
   };
-  alert(labels[action] || "Context copied.");
+  showToast(labels[action] || "Context copied.", "success");
 }
 
 function copyRelationshipContext(encodedIds) {
   const group = decodeLeadGroup(encodedIds);
   navigator.clipboard?.writeText(buildRelationshipContext(group));
-  alert("Relationship context copied.");
+  showToast("Relationship context copied to clipboard.", "success");
 }
 
 function decodeLeadGroup(encodedIds) {
@@ -1621,7 +1621,7 @@ function openLinkedInSearch(group) {
   const url = new URL("https://www.linkedin.com/search/results/people/");
   url.searchParams.set("keywords", `${latest.firstName} ${latest.lastName} ${latest.company}`);
   window.open(url.toString(), "_blank", "noopener,noreferrer");
-  alert("LinkedIn search opened. Connection note copied to clipboard.");
+  showToast("LinkedIn search opened. Connection note copied to clipboard.", "info");
 }
 
 async function enrichLeadData(group, button) {
@@ -1699,11 +1699,11 @@ function renderMatchPreview() {
 async function generateAiSummaries() {
   const buttons = $$("[data-arc-summary]");
   if (!buttons.length) {
-    alert("No repeat contacts yet. Capture a lead and a relationship arc will appear here.");
+    showToast("No repeat contacts yet. Capture a lead and a relationship arc will appear here.", "info");
     return;
   }
   if (!state.ai.key) {
-    alert("No AI key saved. Building local relationship arc summaries instead.");
+    showToast("No AI key saved. Building local relationship arc summaries instead.", "info");
   }
   for (const button of buttons) {
     await summarizeRelationshipArc(button.dataset.arcSummary, button);
@@ -1911,13 +1911,13 @@ function setupSettings() {
     state.ai.baseUrl = ($("#aiBaseUrl")?.value || "").trim() || DEFAULT_AI_BASE_URL;
     saveState();
     renderSettingsStatus();
-    alert("AI settings saved in this browser.");
+    showToast("AI settings saved in this browser.", "success");
   });
   $("#saveHubspot").addEventListener("click", () => {
     state.hubspot.token = $("#hubspotToken").value.trim();
     saveState();
     renderSettingsStatus();
-    alert("HubSpot settings saved in this browser.");
+    showToast("HubSpot settings saved in this browser.", "success");
   });
   $("#saveWeights").addEventListener("click", saveScoringWeights);
   $("#pushHubspot").addEventListener("click", pushHubspot);
@@ -1981,7 +1981,7 @@ function saveScoringWeights() {
   saveState();
   sortState = { key: "score", direction: "desc" };
   renderAll();
-  alert("Scoring weights saved. ICP rankings refreshed.");
+  showToast("Scoring weights saved. ICP rankings refreshed.", "success");
 }
 
 function renderAll() {
