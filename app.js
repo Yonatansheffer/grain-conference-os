@@ -23,6 +23,7 @@ let scoutMediaRecorder = null;
 let scoutAudioChunks = [];
 let editingConferenceId = "";
 let pendingScoutEventId = "";
+let leadRegistryExpanded = false;
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -2222,31 +2223,58 @@ function setupConferenceActions() {
 }
 
 function renderLeadRegistry() {
-  const container = $("#leadRegistry");
-  if (!container) return;
+  const hub = $("#leadRegistryHub");
+  if (!hub) return;
   if (!state.leads.length) {
-    container.innerHTML = "<div class='empty-state'><strong>No leads captured yet.</strong><span>Saved leads will appear here for review and export.</span></div>";
+    leadRegistryExpanded = false;
+    hub.classList.add("lead-registry-empty");
+    hub.innerHTML = "<div class='empty-state'><strong>No leads captured yet</strong><span>Saved leads will appear here for review and export.</span></div>";
     return;
   }
-  container.innerHTML = `<div class="lead-registry-table-wrap">
-    <table class="lead-registry-table">
-      <thead>
-        <tr><th>Contact</th><th>Company</th><th>Conference</th><th>Signal</th><th>Next Step</th></tr>
-      </thead>
-      <tbody>
-        ${[...state.leads].reverse().map((lead) => {
-          const conference = state.conferences.find((item) => item.id === lead.conferenceId);
-          return `<tr>
-            <td><strong>${escapeHtml([lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed lead")}</strong><small>${escapeHtml(lead.email || lead.phone || "No contact detail")}</small></td>
-            <td>${escapeHtml(lead.company || "Unknown")}</td>
-            <td>${escapeHtml(conference?.name || "Unknown event")}</td>
-            <td><span class="lead-signal lead-signal-${normalize(lead.sentiment || "medium")}">${escapeHtml(lead.sentiment || "Medium")}</span></td>
-            <td>${escapeHtml(lead.nextStep || "Not set")}</td>
-          </tr>`;
-        }).join("")}
-      </tbody>
-    </table>
+  hub.classList.remove("lead-registry-empty");
+  hub.innerHTML = `<button id="leadRegistryToggle" class="lead-registry-toggle" type="button" aria-expanded="${leadRegistryExpanded}" aria-controls="leadRegistryBody">
+    <span><strong>Active Lead Registry</strong> <small>(${state.leads.length} ${state.leads.length === 1 ? "Lead" : "Leads"})</small></span>
+    <svg class="lead-registry-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg>
+  </button>
+  <div id="leadRegistryBody" class="lead-registry-body ${leadRegistryExpanded ? "expanded" : ""}">
+    <div class="lead-registry-body-inner">
+      <div class="table-wrap lead-registry-table-wrap">
+        <table class="lead-registry-table">
+          <thead>
+            <tr><th>Contact Details</th><th>Company &amp; Segment</th><th>Encounter Source</th><th>Quick Note Context</th></tr>
+          </thead>
+          <tbody>
+            ${[...state.leads].reverse().map(renderLeadRegistryRow).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="table-actions lead-registry-actions">
+        <span class="muted">Review your active pipeline records captured across all live events before exporting to your CRM or CSV.</span>
+        <button id="exportCsv" class="ghost-button export-button" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg>
+          <span>Export CSV</span>
+        </button>
+      </div>
+    </div>
   </div>`;
+  $("#leadRegistryToggle")?.addEventListener("click", () => {
+    leadRegistryExpanded = !leadRegistryExpanded;
+    const body = $("#leadRegistryBody");
+    body?.classList.toggle("expanded", leadRegistryExpanded);
+    $("#leadRegistryToggle").setAttribute("aria-expanded", String(leadRegistryExpanded));
+  });
+  $("#exportCsv")?.addEventListener("click", exportCsv);
+}
+
+function renderLeadRegistryRow(lead) {
+  const conference = state.conferences.find((item) => item.id === lead.conferenceId);
+  const vertical = lead.vertical || "Other";
+  return `<tr>
+    <td><div class="lead-contact-cell"><strong>${escapeHtml([lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed lead")}</strong><small>${escapeHtml(lead.title || "Title not captured")}</small></div></td>
+    <td><div class="lead-company-cell"><strong>${escapeHtml(lead.company || "Unknown company")}</strong><span class="vertical-pill ${verticalPillClass(vertical)}">${escapeHtml(vertical)}</span></div></td>
+    <td>${escapeHtml(conference?.name || "Unknown event")}</td>
+    <td class="lead-note-cell">${escapeHtml(lead.notes || "No note captured")}</td>
+  </tr>`;
 }
 
 function openAddConferenceForm() {
@@ -2657,7 +2685,6 @@ function setup() {
     renderActiveFilterChips();
     renderConferenceRows();
   });
-  $("#exportCsv").addEventListener("click", exportCsv);
   $("#seedReset").addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
     location.reload();
