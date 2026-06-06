@@ -9,6 +9,11 @@ let clusterConfig = { regions: [], windowDays: 10 };
 let visibleGapSegments = ["Fintech", "Payments", "Treasury"];
 let scoutState = { gap: null, results: [], loading: false, resolvedGapKey: "" };
 const relationshipSummaryCache = new Map();
+// Session-state caches for the ICP Account Presence Matcher, keyed by conference
+// id. Keeping predictions and drafted hooks here means clicking around the app
+// or retuning scoring sliders never re-fires an expensive model call.
+const accountPresenceCache = new Map();
+const outreachHookCache = new Map();
 let speechRecognition = null;
 let isRecordingScribble = false;
 let scoutRecognition = null;
@@ -958,7 +963,205 @@ function renderSelectedConference() {
       <p>${scoreNarrative(c)}</p>
       <p><strong>Trip piggyback:</strong> ${nearby.length ? nearby.map((n) => `${n.name} (${n.city})`).join(", ") : "No close cluster in the next 30 days."}</p>
     </div>
-  </div>`;
+  </div>
+  <div class="account-presence" id="accountPresence" data-conf-id="${c.id}"></div>`;
+  renderAccountPresence(c);
+}
+
+// --- ICP Account Presence Matcher ---------------------------------------------
+// Predicts which HubSpot target accounts are likely on the floor and surfaces a
+// clickable count badge with a color-coded, AI-reasoned breakdown.
+async function predictAccountPresence(conference) {
+  if (accountPresenceCache.has(conference.id)) return accountPresenceCache.get(conference.id);
+  let matches;
+  try {
+    matches = state.ai.key ? await fetchAccountPresence(conference) : localAccountPresence(conference);
+  } catch (error) {
+    matches = localAccountPresence(conference);
+  }
+  accountPresenceCache.set(conference.id, matches);
+  return matches;
+}
+
+async function fetchAccountPresence(conference) {
+  const content = await aiChat(
+    [
+      {
+        role: "system",
+        content: [
+          "You are Grain's ICP Account Presence Matcher.",
+          "Given a conference and a list of HubSpot target accounts, predict which accounts are likely to attend or sponsor.",
+          "Weigh geographic alignment (account HQ vs conference region), industry vertical fit, and typical corporate event behavior.",
+          "Return only JSON: { \"matches\": [ { \"company_name\", \"match_probability\", \"ai_reasoning\" } ] }.",
+          "match_probability must be exactly one of: Confirmed, High, Medium. Only include accounts that genuinely match; omit weak fits.",
+          "ai_reasoning must be a single contextual sales-justification sentence. Use company_name values exactly as provided."
+        ].join(" ")
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          conference: {
+            name: conference.name,
+            city: conference.city,
+            country: conference.country,
+            region: conference.region,
+            verticals: conference.verticals,
+            fxRelevance: conference.fxRelevance,
+            pspRelevance: conference.pspRelevance,
+            travelRelevance: conference.travelRelevance
+          },
+          hubspotAccounts: HUBSPOT_ACCOUNTS.map((a) => ({
+            company_name: a.company_name,
+            hubspot_status: a.hubspot_status,
+            vertical: a.vertical,
+            hq: a.hq,
+            confirmedSponsor: Array.isArray(a.knownSponsorOf) && a.knownSponsorOf.includes(conference.id)
+          }))
+        })
+      }
+    ],
+    { json: true }
+  );
+  return normalizeAccountMatches(JSON.parse(content || "{}").matches);
+}
+
+async function renderAccountPresence(conference) {
+  const container = $("#accountPresence");
+  if (!container) return;
+  const cached = accountPresenceCache.has(conference.id);
+  container.innerHTML = `
+    <div class="presence-head">
+      <p class="eyebrow">ICP Account Presence</p>
+      <span class="muted">${state.ai.key ? "AI prediction" : "Local heuristic"} from your HubSpot target book</span>
+    </div>
+    <div class="presence-body">${cached ? "" : '<span class="muted presence-loading">Matching target accounts…</span>'}</div>`;
+  const body = container.querySelector(".presence-body");
+  const matches = await predictAccountPresence(conference);
+  // Bail if the user navigated to a different conference while we awaited.
+  if (container.dataset.confId !== conference.id) return;
+  body.innerHTML = renderPresenceMatches(conference, matches);
+  wirePresenceInteractions(conference, body);
+}
+
+function renderPresenceMatches(conference, matches) {
+  if (!matches.length) {
+    return '<p class="muted">No target accounts from the current HubSpot book map to this event.</p>';
+  }
+  const rows = matches
+    .map(
+      (m) => `<li class="presence-row">
+        <div class="presence-row-head">
+          <span class="presence-dot ${presenceDotClass(m.match_probability)}" aria-hidden="true"></span>
+          <span class="presence-company">${escapeHtml(m.company_name)}</span>
+          <span class="presence-meta">${escapeHtml(m.match_probability)} — HubSpot: ${escapeHtml(m.hubspot_status)}</span>
+        </div>
+        <p class="presence-insight"><span class="presence-branch" aria-hidden="true">└─</span> AI Insight: ${escapeHtml(m.ai_reasoning)}</p>
+      </li>`
+    )
+    .join("");
+  return `
+    <button class="presence-badge" type="button" id="presenceBadge" aria-expanded="false">
+      <span aria-hidden="true">📊</span> ${matches.length} Target Account${matches.length === 1 ? "" : "s"} Matched
+      <span class="presence-caret" aria-hidden="true">▾</span>
+    </button>
+    <div class="presence-popover" id="presencePopover" hidden>
+      <ul class="presence-list">${rows}</ul>
+      <button class="presence-draft-button" type="button" id="draftHooksButton">🪄 Draft Outreach Hooks for Matched Accounts</button>
+      <div class="presence-hooks" id="presenceHooks"></div>
+    </div>`;
+}
+
+function wirePresenceInteractions(conference, body) {
+  const badge = body.querySelector("#presenceBadge");
+  const popover = body.querySelector("#presencePopover");
+  if (badge && popover) {
+    badge.addEventListener("click", () => {
+      const open = popover.hidden;
+      popover.hidden = !open;
+      badge.setAttribute("aria-expanded", String(open));
+    });
+  }
+  const draftButton = body.querySelector("#draftHooksButton");
+  if (draftButton) {
+    draftButton.addEventListener("click", () => draftOutreachHooks(conference, draftButton));
+  }
+  if (outreachHookCache.has(conference.id)) {
+    renderOutreachHooks(body, outreachHookCache.get(conference.id));
+  }
+}
+
+async function draftOutreachHooks(conference, button) {
+  const hooksSlot = $("#presenceHooks");
+  if (outreachHookCache.has(conference.id)) {
+    renderOutreachHooks(button.closest(".presence-popover"), outreachHookCache.get(conference.id));
+    return;
+  }
+  const matches = accountPresenceCache.get(conference.id) || [];
+  if (!matches.length) return;
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = state.ai.key ? "Drafting hooks…" : "Building hooks…";
+  if (hooksSlot) hooksSlot.innerHTML = "";
+  let hooks;
+  try {
+    hooks = state.ai.key ? await fetchOutreachHooks(conference, matches) : localOutreachHooks(conference, matches);
+  } catch (error) {
+    hooks = localOutreachHooks(conference, matches);
+  }
+  outreachHookCache.set(conference.id, hooks);
+  renderOutreachHooks(button.closest(".presence-popover"), hooks);
+  button.disabled = false;
+  button.textContent = original;
+}
+
+async function fetchOutreachHooks(conference, matches) {
+  const content = await aiChat(
+    [
+      {
+        role: "system",
+        content: [
+          "You are a Grain SDR writing first-touch outreach hooks for accounts likely attending a conference.",
+          "Return only JSON: { \"hooks\": [ { \"company_name\", \"hook\" } ] }.",
+          "Each hook is one or two sentences, references the specific event and the account's FX/payments/treasury pain, and is ready to drop into a LinkedIn or email opener.",
+          "Use company_name values exactly as provided."
+        ].join(" ")
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          conference: { name: conference.name, city: conference.city, region: conference.region, verticals: conference.verticals },
+          accounts: matches.map((m) => ({ company_name: m.company_name, vertical: m.vertical, hubspot_status: m.hubspot_status, match_probability: m.match_probability }))
+        })
+      }
+    ],
+    { json: true }
+  );
+  const parsed = JSON.parse(content || "{}").hooks;
+  const byName = new Set(matches.map((m) => m.company_name));
+  const hooks = (Array.isArray(parsed) ? parsed : [])
+    .filter((h) => byName.has(h?.company_name) && String(h?.hook || "").trim())
+    .map((h) => ({ company_name: h.company_name, hook: h.hook.trim() }));
+  return hooks.length ? hooks : localOutreachHooks(conference, matches);
+}
+
+function localOutreachHooks(conference, matches) {
+  return matches.map((m) => ({
+    company_name: m.company_name,
+    hook: `Saw ${m.company_name} lines up with ${conference.name} — given your ${m.vertical.toLowerCase()} footprint, worth comparing how teams are containing FX margin leakage before the show. Open to a quick floor chat in ${conference.city}?`
+  }));
+}
+
+function renderOutreachHooks(scope, hooks) {
+  const slot = scope ? scope.querySelector("#presenceHooks") : $("#presenceHooks");
+  if (!slot) return;
+  slot.innerHTML = hooks
+    .map(
+      (h) => `<div class="presence-hook">
+        <strong>${escapeHtml(h.company_name)}</strong>
+        <p>${escapeHtml(h.hook)}</p>
+      </div>`
+    )
+    .join("");
 }
 
 function scoreNarrative(c) {

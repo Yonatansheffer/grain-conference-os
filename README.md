@@ -33,6 +33,7 @@ The app is intentionally built around a salesperson's workflow:
 - Fast capture form for show-floor use, with only the fields a rep can realistically log between conversations.
 - Cross-conference relationship tracking with confidence-banded matching: high-confidence matches merge automatically (transitive, order-independent), borderline matches surface as a "possible same person" prompt for the rep to confirm, and email-domain changes are flagged as likely job changes.
 - A relationship signal driven by the sentiment/urgency trajectory across encounters, not a raw repeat count, so a warming buyer reads differently from a polite long-cycle tire-kicker.
+- An ICP Account Presence Matcher inside each conference card that predicts which HubSpot target accounts are likely to attend or sponsor — scored by geographic alignment, vertical fit, and known sponsorships — with a per-account probability (Confirmed / High / Medium), a one-line AI sales justification, and a one-click "Draft Outreach Hooks" loop. Predictions are cached per conference so clicking around or retuning scoring sliders never re-fires a model call.
 - Optional AI feature for inline, per-contact relationship-arc summaries (cached so an unchanged contact is never re-billed) and follow-up guidance, with a transparent local fallback.
 - HubSpot CSV export plus optional direct contact creation with a user-provided private app token.
 
