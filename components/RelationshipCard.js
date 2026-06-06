@@ -17,10 +17,12 @@ function renderRelationshipCard(group) {
       <div class="relationship-timeline">
         ${orderedGroup.map((lead, index) => renderRelationshipTimelineStep(lead, orderedGroup[index - 1])).join("")}
       </div>
+      <div class="relationship-ai-summary" data-summary-slot="${encodedId}" aria-live="polite"></div>
       <div class="lead-enrichment" aria-live="polite"></div>
     </div>
     <div class="actions">
       <span class="relationship-signal signal-${signal.tone}">${escapeHtml(signal.label)}</span>
+      <button class="primary-button arc-summary-button" type="button" data-arc-summary="${encodedId}">AI arc summary</button>
       <div class="next-steps">
         <span class="muted">Next steps</span>
         ${relationshipNextSteps(orderedGroup).map((step) => `<button class="ghost-button action-${step.action}" type="button" data-next-step="${step.action}" data-group="${encodedId}">${escapeHtml(step.label)}</button>`).join("")}
@@ -39,21 +41,30 @@ function renderRelationshipTimelineStep(lead, previousLead) {
         <strong>${escapeHtml(conference?.name || "Unknown conference")}</strong>
         <span>${escapeHtml(lead.title || "Unknown title")} | ${escapeHtml(lead.company || "Unknown company")}</span>
       </div>
-      ${mutation ? `<span class="mutation-badge">AI Mutation Detected: ${escapeHtml(mutation)}</span>` : ""}
+      ${mutation ? `<span class="mutation-badge">Change detected: ${escapeHtml(mutation)}</span>` : ""}
       <p>${escapeHtml(lead.notes || "No floor notes captured.")}</p>
     </div>
   </div>`;
 }
 
+// Surfaces the job-change signals across consecutive encounters. A new work-email
+// domain is the strongest "they switched employers" tell, so it is called out
+// explicitly rather than left to fuzzy name matching.
 function relationshipMutationText(previousLead, lead) {
   if (!previousLead) return "";
+  const changes = [];
   if (previousLead.company && lead.company && normalize(previousLead.company) !== normalize(lead.company)) {
-    return `Company changed from ${previousLead.company} to ${lead.company} since last encounter.`;
+    changes.push(`Company ${previousLead.company} -> ${lead.company}`);
+  }
+  const previousDomain = domainFromLead(previousLead);
+  const currentDomain = domainFromLead(lead);
+  if (previousDomain && currentDomain && previousDomain !== currentDomain) {
+    changes.push(`New work email (${previousDomain} -> ${currentDomain}), likely changed employer`);
   }
   if (previousLead.title && lead.title && normalize(previousLead.title) !== normalize(lead.title)) {
-    return `${titleMutationVerb(previousLead.title, lead.title)} from ${previousLead.title} to ${lead.title} since last encounter.`;
+    changes.push(`${titleMutationVerb(previousLead.title, lead.title)} ${previousLead.title} -> ${lead.title}`);
   }
-  return "";
+  return changes.join(" | ");
 }
 
 function titleMutationVerb(previousTitle, currentTitle) {
@@ -66,18 +77,23 @@ function titleMutationVerb(previousTitle, currentTitle) {
   return seniorityRank(currentTitle) > seniorityRank(previousTitle) ? "Promoted" : "Changed";
 }
 
+// The badge reflects the relationship trajectory (see analyzeRelationship), so a
+// flat repeat contact reads as a tire-kicker risk while a rising one reads as
+// warming, rather than every repeat looking the same.
 function relationshipSignal(group) {
-  const explicitFollowUp = group.some((lead) => /book|demo|intro|call|meeting|cfo|treasury lead|solutions engineering/i.test(`${lead.nextStep || ""} ${lead.notes || ""}`));
-  const buyingIndicators = group.some((lead) => /budget|asked|wants|vendor shortlist|benchmark|treasury|hedging|slippage|exposure|demo/i.test(`${lead.notes || ""} ${lead.nextStep || ""}`));
-  const highTierIcp = group.some((lead) => ["Payments", "Travel", "Banking"].includes(lead.vertical) && lead.sentiment === "Strong");
-  const withinSixMonths = group.length > 1 && (new Date(group[group.length - 1].createdAt) - new Date(group[0].createdAt)) / 86400000 <= 183;
-  if (group.length > 1 && highTierIcp && explicitFollowUp) {
-    return { tone: "champion", label: "High-Velocity Champion" };
+  const { stage, longCycle } = analyzeRelationship(group);
+  switch (stage) {
+    case "champion":
+      return { tone: "champion", label: "High-Velocity Champion" };
+    case "warming":
+      return { tone: "warming", label: "Warming Opportunity" };
+    case "cooling":
+      return { tone: "cooling", label: "Cooling Interest" };
+    case "stalled":
+      return { tone: "latent", label: longCycle ? "Tire-Kicker Risk" : "Holding Pattern" };
+    default:
+      return { tone: "latent", label: "Known Contact" };
   }
-  if (group.length > 1 && withinSixMonths && buyingIndicators) {
-    return { tone: "warming", label: "Warming Opportunity" };
-  }
-  return { tone: "latent", label: "Latent / Low Touch" };
 }
 
 function formatLeadDate(value) {

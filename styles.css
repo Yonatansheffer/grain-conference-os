@@ -2021,6 +2021,25 @@ tbody tr:hover {
   color: var(--red);
 }
 
+.signal-cooling {
+  background: var(--slate-soft);
+  color: var(--muted);
+}
+
+.match-suggestions {
+  display: grid;
+  gap: 6px;
+  border-left: 3px solid var(--gold);
+}
+
+.match-suggestions ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  color: var(--ink);
+}
+
 .copy-context-button {
   flex: 0 0 auto;
   width: 30px;
@@ -2110,6 +2129,33 @@ tbody tr:hover {
 .lead-enrichment strong {
   color: var(--primary-dark);
   margin: 0;
+}
+
+.relationship-ai-summary {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--lavender-soft);
+  border-left: 3px solid var(--primary);
+  border-radius: 8px;
+  background: var(--lavender-soft);
+  color: var(--ink);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.relationship-ai-summary:empty {
+  display: none;
+}
+
+.relationship-ai-summary strong {
+  color: var(--primary-dark);
+  margin: 0;
+}
+
+.arc-summary-button {
+  width: 100%;
 }
 
 .heat {

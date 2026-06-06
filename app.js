@@ -8,6 +8,7 @@ let calendarDate = new Date("2026-06-01T00:00:00");
 let clusterConfig = { regions: [], windowDays: 10 };
 let visibleGapSegments = ["Fintech", "Payments", "Treasury"];
 let scoutState = { gap: null, results: [], loading: false, resolvedGapKey: "" };
+const relationshipSummaryCache = new Map();
 let speechRecognition = null;
 let isRecordingScribble = false;
 let scoutRecognition = null;
@@ -27,7 +28,7 @@ function loadState() {
   return {
     conferences: clone(CONFERENCES),
     leads: clone(LEADS),
-    ai: { key: "", model: "gpt-4o-mini" },
+    ai: { key: "", model: "gpt-4o-mini", baseUrl: DEFAULT_AI_BASE_URL },
     hubspot: { token: "" },
     scoringWeights: clone(DEFAULT_SCORE_WEIGHTS)
   };
@@ -36,6 +37,8 @@ function loadState() {
 function migrateState(loaded) {
   loaded = loaded || {};
   loaded.ai = loaded.ai || { key: "", model: "gpt-4o-mini" };
+  loaded.ai.model = loaded.ai.model || "gpt-4o-mini";
+  loaded.ai.baseUrl = loaded.ai.baseUrl || DEFAULT_AI_BASE_URL;
   loaded.hubspot = loaded.hubspot || { token: "", lastSuccessfulSync: "" };
   loaded.hubspot.lastSuccessfulSync = loaded.hubspot.lastSuccessfulSync || "";
   loaded.scoringWeights = migrateScoringWeights(loaded.scoringWeights);
@@ -166,25 +169,29 @@ function analyzePipelineGap() {
 
 
 function relationshipGroups() {
-  const groups = [];
-  for (const lead of state.leads) {
-    let group = groups.find((g) => g.some((existing) => leadMatchScore(existing, lead) >= 0.72));
-    if (group) group.push(lead);
-    else groups.push([lead]);
-  }
-  return groups
-    .filter((g) => g.length > 1)
-    .map((g) => g.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
+  return buildRelationshipGroups(state.leads).groups;
 }
 
+// Turns the trajectory analysis into a rep-facing read. The interpretation
+// (warming vs. polite tire-kicker) comes from how sentiment and urgency moved
+// across encounters, not from how many times the person showed up.
 function relationshipVerdict(group) {
-  const strong = group.filter((l) => l.sentiment === "Strong").length;
-  const immediate = group.filter((l) => ["Immediate", "This quarter"].includes(l.urgency)).length;
-  const conferences = new Set(group.map((l) => l.conferenceId)).size;
-  const hasBudgetConcern = group.some((l) => /budget|benchmark|curious|exploring/i.test(l.notes));
-  if (strong >= 2 || immediate >= 2) return "Warming relationship: schedule a focused demo call with the right commercial and treasury stakeholders.";
-  if (conferences >= 2 && hasBudgetConcern) return "Repeat interest, not yet pain-confirmed: qualify budget and owner before more nurturing.";
-  return "Known face: keep context visible, but avoid over-weighting the repeat count.";
+  const a = analyzeRelationship(group);
+  const span = a.spanDays >= 30 ? ` over ${a.spanDays} days` : "";
+  switch (a.stage) {
+    case "champion":
+      return `Warming relationship worth closing: ${a.encounters} encounters${span}, sentiment held strong and urgency is near-term. Get the right commercial and treasury stakeholders into a focused demo now.`;
+    case "warming":
+      return `Trending up: interest rose across ${a.encounters} encounters${span}. Real momentum — propose a concrete next step (working session or scoped pilot) while it is warm.`;
+    case "cooling":
+      return `Cooling: engagement dropped since the first encounter. Re-qualify the pain and decision owner before investing more, or park it politely.`;
+    case "stalled":
+      return a.longCycle
+        ? `Long-cycle listener: ${a.encounters} encounters${span} with no lift in sentiment${a.hasBudgetSignal ? " and recurring budget hesitation" : ""}. Likely a polite tire-kicker — make one direct budget/owner ask, then de-prioritize if it stays flat.`
+        : `Holding pattern: repeat interest but sentiment has not moved${a.hasBudgetSignal ? "; budget and owner still unconfirmed" : ""}. Qualify the buying owner before more nurturing.`;
+    default:
+      return `Known contact across ${a.encounters} encounters${span}. Keep the context visible without over-weighting the repeat count.`;
+  }
 }
 
 function renderNav() {
@@ -417,6 +424,31 @@ function setupPlanningControls() {
   $("#scoutMic")?.addEventListener("click", toggleScoutVoicePrompt);
 }
 
+// Single place that talks to the model. The endpoint base is user-configurable
+// (OpenAI, Azure OpenAI, or any OpenAI-compatible gateway) so lead data never has
+// to leave an approved provider — important for a fintech/treasury buyer.
+function aiBaseUrl() {
+  return (state.ai.baseUrl || DEFAULT_AI_BASE_URL).trim().replace(/\/+$/, "");
+}
+
+async function aiChat(messages, { json = false } = {}) {
+  const response = await fetch(`${aiBaseUrl()}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${state.ai.key}`
+    },
+    body: JSON.stringify({
+      model: state.ai.model || "gpt-4o-mini",
+      ...(json ? { response_format: { type: "json_object" } } : {}),
+      messages
+    })
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
 async function runScoutSearch() {
   const prompt = $("#scoutPrompt")?.value.trim();
   if (!prompt) {
@@ -442,47 +474,36 @@ async function runScoutSearch() {
 }
 
 async function fetchAiScoutResults(prompt) {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${state.ai.key}`
-    },
-    body: JSON.stringify({
-      model: state.ai.model || "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: [
-            "You are Grain's Proactive AI Pipeline Scout.",
-            "Return only JSON with an events array.",
-            "Each event must have name, startDate, endDate, city, country, region, verticals, audience, seniority, buyerDensity, fxRelevance, travelRelevance, pspRelevance, costTier, source, and pitchHook.",
-            "Only include realistic conference dates in 2026 or 2027.",
-            "Prioritize PSPs, payments, travel wholesalers, CFOs, treasurers, finance leaders, and enterprise FX exposure."
-          ].join(" ")
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            prompt,
-            existingEvents: state.conferences.map((event) => ({
-              id: event.id,
-              name: event.name,
-              startDate: event.startDate,
-              city: event.city,
-              country: event.country,
-              verticals: event.verticals
-            }))
-          })
-        }
-      ]
-    })
-  });
-  if (!response.ok) throw new Error(await response.text());
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || "{}";
-  return JSON.parse(content).events || [];
+  const content = await aiChat(
+    [
+      {
+        role: "system",
+        content: [
+          "You are Grain's Proactive AI Pipeline Scout.",
+          "Return only JSON with an events array.",
+          "Each event must have name, startDate, endDate, city, country, region, verticals, audience, seniority, buyerDensity, fxRelevance, travelRelevance, pspRelevance, costTier, source, and pitchHook.",
+          "Only include realistic conference dates in 2026 or 2027.",
+          "Prioritize PSPs, payments, travel wholesalers, CFOs, treasurers, finance leaders, and enterprise FX exposure."
+        ].join(" ")
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          prompt,
+          existingEvents: state.conferences.map((event) => ({
+            id: event.id,
+            name: event.name,
+            startDate: event.startDate,
+            city: event.city,
+            country: event.country,
+            verticals: event.verticals
+          }))
+        })
+      }
+    ],
+    { json: true }
+  );
+  return JSON.parse(content || "{}").events || [];
 }
 
 function localScoutResults(prompt) {
@@ -757,7 +778,7 @@ async function transcribeScoutAudio() {
   const formData = new FormData();
   formData.append("model", "whisper-1");
   formData.append("file", audioBlob, "pipeline-scout.webm");
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  const response = await fetch(`${aiBaseUrl()}/audio/transcriptions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${state.ai.key}` },
     body: formData
@@ -1180,25 +1201,143 @@ function findClusters() {
   return clusters.slice(0, 5);
 }
 
+// Medium-confidence matches are never merged silently — they are shown as a
+// "possible same person" prompt so the rep, not the tool, makes the call. This
+// keeps false merges out of the CRM while still catching name variations.
+function renderMatchSuggestions(suggestions) {
+  if (!suggestions.length) return "";
+  const rows = suggestions
+    .map((pair) => {
+      const confAName = state.conferences.find((c) => c.id === pair.a.conferenceId)?.name || "a conference";
+      const confBName = state.conferences.find((c) => c.id === pair.b.conferenceId)?.name || "a conference";
+      return `<li><strong>${escapeHtml(pair.a.firstName)} ${escapeHtml(pair.a.lastName)}</strong> (${escapeHtml(pair.a.company)}, ${escapeHtml(confAName)}) and <strong>${escapeHtml(pair.b.firstName)} ${escapeHtml(pair.b.lastName)}</strong> (${escapeHtml(pair.b.company)}, ${escapeHtml(confBName)}) &mdash; ${Math.round(pair.score * 100)}% match</li>`;
+    })
+    .join("");
+  return `<div class="panel match-suggestions">
+    <strong>Possible same person &mdash; worth a quick check</strong>
+    <p class="muted">Close but not certain, so we did not merge these automatically. Confirm in the field if they are the same contact.</p>
+    <ul>${rows}</ul>
+  </div>`;
+}
+
 function renderRelationships() {
-  const groups = relationshipGroups();
-  $("#relationshipList").innerHTML = groups.length
+  const { groups, suggestions } = buildRelationshipGroups(state.leads);
+  const cards = groups.length
     ? groups.map(renderRelationshipCard).join("")
     : "<div class='panel'><p class='muted'>No repeat contacts yet. Capture a lead and this view will update automatically.</p></div>";
+  $("#relationshipList").innerHTML = renderMatchSuggestions(suggestions) + cards;
   $$("[data-next-step]").forEach((button) => {
     button.addEventListener("click", () => handleNextStep(button.dataset.nextStep, button.dataset.group, button));
   });
   $$("[data-copy-context]").forEach((button) => {
     button.addEventListener("click", () => copyRelationshipContext(button.dataset.copyContext));
   });
+  $$("[data-arc-summary]").forEach((button) => {
+    button.addEventListener("click", () => summarizeRelationshipArc(button.dataset.arcSummary, button));
+  });
+  rehydrateRelationshipSummaries();
+}
+
+function relationshipKey(group) {
+  return group.map((lead) => lead.id).slice().sort().join(",");
+}
+
+function renderArcSummary(slot, summary) {
+  slot.innerHTML = `<strong>Relationship arc</strong><span>${escapeHtml(summary)}</span>`;
+}
+
+// Re-paint any summaries we have already generated after the list re-renders,
+// so capturing a new lead elsewhere does not wipe a brief the rep just read.
+function rehydrateRelationshipSummaries() {
+  $$("[data-summary-slot]").forEach((slot) => {
+    const group = decodeLeadGroup(slot.dataset.summarySlot);
+    if (group.length < 2) return;
+    const cached = relationshipSummaryCache.get(relationshipKey(group));
+    if (cached) renderArcSummary(slot, cached);
+  });
+}
+
+// The relationship-arc summary is the one place AI clearly beats rules: it weighs
+// the trajectory, the notes, and the job changes into a short human read. Results
+// are cached per contact so we never re-bill a key for an unchanged relationship.
+async function summarizeRelationshipArc(encodedIds, button) {
+  const group = decodeLeadGroup(encodedIds);
+  if (group.length < 2) return;
+  const slot = button.closest(".relationship")?.querySelector(".relationship-ai-summary");
+  if (!slot) return;
+  const key = relationshipKey(group);
+  if (relationshipSummaryCache.has(key)) {
+    renderArcSummary(slot, relationshipSummaryCache.get(key));
+    return;
+  }
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = state.ai.key ? "Summarizing..." : "Building...";
+  renderArcSummary(slot, state.ai.key ? "Generating an AI arc summary..." : "Building a local arc summary...");
+  let summary;
+  try {
+    summary = state.ai.key ? await summarizeArcWithAi(group) : localArcSummary(group);
+  } catch (error) {
+    summary = localArcSummary(group);
+  }
+  relationshipSummaryCache.set(key, summary);
+  renderArcSummary(slot, summary);
+  button.disabled = false;
+  button.textContent = originalLabel;
+}
+
+async function summarizeArcWithAi(group) {
+  const analysis = analyzeRelationship(group);
+  const facts = {
+    stage: analysis.stage,
+    direction: analysis.direction,
+    encounters: analysis.encounters,
+    spanDays: analysis.spanDays,
+    companyChanged: analysis.companyChanged,
+    titleChanged: analysis.titleChanged,
+    domainChanged: analysis.domainChanged
+  };
+  const encounters = analysis.ordered.map((lead) => ({
+    conference: state.conferences.find((c) => c.id === lead.conferenceId)?.name || "Unknown",
+    date: lead.createdAt,
+    title: lead.title,
+    company: lead.company,
+    sentiment: lead.sentiment,
+    urgency: lead.urgency,
+    notes: lead.notes
+  }));
+  const content = await aiChat([
+    {
+      role: "system",
+      content: "You brief Grain sales reps (FX risk fintech serving PSPs, payments, travel wholesalers, and treasury). Summarize a cross-conference relationship arc in 2 sentences, then give one concrete next step on its own line. Use the sentiment/urgency trajectory to judge whether this is a warming buyer or a polite repeat tire-kicker. Be direct, no generic CRM filler."
+    },
+    {
+      role: "user",
+      content: JSON.stringify({ facts, encounters })
+    }
+  ]);
+  return content.trim();
+}
+
+// Deterministic fallback that is still genuinely useful: the encounter path plus
+// the trajectory verdict, so the feature works with no key and offline.
+function localArcSummary(group) {
+  const analysis = analyzeRelationship(group);
+  const path = analysis.ordered
+    .map((lead) => {
+      const conference = state.conferences.find((c) => c.id === lead.conferenceId)?.name || "a conference";
+      return `${conference} (${lead.sentiment}/${lead.urgency})`;
+    })
+    .join(" -> ");
+  return `${analysis.latest.firstName} ${analysis.latest.lastName} at ${analysis.latest.company}: ${path}. ${relationshipVerdict(group)}`;
 }
 
 function relationshipNextSteps(group) {
-  const verdict = relationshipVerdict(group);
+  const { stage } = analyzeRelationship(group);
   const steps = [{ action: "gmail", label: "Draft Email Follow-up" }];
-  if (/Warming relationship/i.test(verdict)) {
+  if (stage === "champion" || stage === "warming") {
     steps.push({ action: "demo", label: "Schedule Demo Call" });
-  } else if (/budget|owner/i.test(verdict)) {
+  } else if (stage === "stalled" || stage === "cooling") {
     steps.push({ action: "qualify", label: "Qualify budget owner" });
   } else {
     steps.push({ action: "nurture", label: "Add nurture task" });
@@ -1272,30 +1411,20 @@ async function parseFloorScribble() {
 
 async function parseScribbleWithAi(raw) {
   const conferences = state.conferences.map((c) => ({ id: c.id, name: c.name, city: c.city, region: c.region, aliases: [c.name.toLowerCase(), c.city.toLowerCase()] }));
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${state.ai.key}`
-    },
-    body: JSON.stringify({
-      model: state.ai.model || "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: "Extract a conference lead from messy sales notes. Return only JSON with keys: firstName,lastName,company,title,email,phone,conferenceId,vertical,urgency,sentiment,painPoints,nextStep,notes. Use null for unknown. sentiment must be Strong, Medium, or Weak. urgency must be Immediate, This quarter, Exploring, or Not a fit. Choose conferenceId only from the provided conference list."
-        },
-        {
-          role: "user",
-          content: JSON.stringify({ raw, conferences })
-        }
-      ]
-    })
-  });
-  if (!response.ok) throw new Error(await response.text());
-  const data = await response.json();
-  return JSON.parse(data.choices[0].message.content);
+  const content = await aiChat(
+    [
+      {
+        role: "system",
+        content: "Extract a conference lead from messy sales notes. Return only JSON with keys: firstName,lastName,company,title,email,phone,conferenceId,vertical,urgency,sentiment,painPoints,nextStep,notes. Use null for unknown. sentiment must be Strong, Medium, or Weak. urgency must be Immediate, This quarter, Exploring, or Not a fit. Choose conferenceId only from the provided conference list."
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ raw, conferences })
+      }
+    ],
+    { json: true }
+  );
+  return JSON.parse(content);
 }
 
 function parseScribbleLocally(raw) {
@@ -1441,7 +1570,7 @@ function buildEmailDraft(group) {
   const body = [
     `Hi ${latest.firstName},`,
     "",
-    `Great speaking again. I was thinking about your ${latest.company} use case around ${latest.vertical.toLowerCase()} FX exposure, especially after hearing: "${latest.notes || "the context you shared"}".`,
+    `Great speaking again. I was thinking about your ${latest.company} use case around ${(latest.vertical || "FX").toLowerCase()} FX exposure, especially after hearing: "${latest.notes || "the context you shared"}".`,
     "",
     `${relationshipVerdict(group)} My suggested next step is: ${latest.nextStep || "a short working session with the relevant commercial and treasury owners"}.`,
     "",
@@ -1516,34 +1645,23 @@ async function enrichLeadData(group, button) {
 
 async function enrichLeadWithAi(lead, group) {
   const domain = domainFromLead(lead);
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${state.ai.key}`
+  const content = await aiChat([
+    {
+      role: "system",
+      content: "You create concise B2B sales enrichment briefs for Grain, an FX risk fintech. Use only the provided lead data and generally known company/domain context; do not invent facts. Return 2 short sentences plus one suggested qualification question."
     },
-    body: JSON.stringify({
-      model: state.ai.model || "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: "You create concise B2B sales enrichment briefs for Grain, an FX risk fintech. Use only the provided lead data and generally known company/domain context; do not invent facts. Return 2 short sentences plus one suggested qualification question."
-        },
-        {
-          role: "user",
-          content: JSON.stringify({ lead, domain, relationshipContext: buildRelationshipContext(group) })
-        }
-      ]
-    })
-  });
-  if (!response.ok) throw new Error(await response.text());
-  const data = await response.json();
-  return data.choices[0].message.content.trim();
+    {
+      role: "user",
+      content: JSON.stringify({ lead, domain, relationshipContext: buildRelationshipContext(group) })
+    }
+  ]);
+  return content.trim();
 }
 
 function localCompanyBrief(lead, group) {
   const domain = domainFromLead(lead);
-  return `${lead.company}${domain ? ` (${domain})` : ""} appears in this relationship as a ${lead.vertical.toLowerCase()} account with ${group.length} conference touchpoints. Qualify current FX exposure, decision owner, and whether the next conversation should include finance or treasury leadership.`;
+  const vertical = (lead.vertical || "FX-exposed").toLowerCase();
+  return `${lead.company}${domain ? ` (${domain})` : ""} appears in this relationship as a ${vertical} account with ${group.length} conference touchpoints. Qualify current FX exposure, decision owner, and whether the next conversation should include finance or treasury leadership.`;
 }
 
 function buildRelationshipContext(group) {
@@ -1575,36 +1693,20 @@ function renderMatchPreview() {
     : "No likely repeat contact yet.";
 }
 
+// "Generate all" simply drives the per-card summarizer for every relationship,
+// reusing the same cache and inline slots so the list stays intact and the rep
+// keeps the timeline, signal, and next steps in view alongside each brief.
 async function generateAiSummaries() {
-  const groups = relationshipGroups();
-  if (!groups.length) return;
-  if (!state.ai.key) {
-    alert("No AI key saved. Showing local relationship summaries instead.");
-    renderRelationships();
+  const buttons = $$("[data-arc-summary]");
+  if (!buttons.length) {
+    alert("No repeat contacts yet. Capture a lead and a relationship arc will appear here.");
     return;
   }
-  $("#relationshipList").innerHTML = "<div class='panel'><p>Generating summaries...</p></div>";
-  try {
-    const prompt = `You are helping Grain, an FX risk fintech, brief sales reps. Summarize each repeat contact in 2 sentences and include one practical next step. Data: ${JSON.stringify(groups)}`;
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.ai.key}`
-      },
-      body: JSON.stringify({
-        model: state.ai.model || "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "Return concise sales guidance, not generic CRM text." },
-          { role: "user", content: prompt }
-        ]
-      })
-    });
-    if (!response.ok) throw new Error(await response.text());
-    const data = await response.json();
-    $("#relationshipList").innerHTML = `<div class="panel"><h3>AI relationship briefing</h3><p>${data.choices[0].message.content.replace(/\n/g, "<br>")}</p></div>` + groups.map(renderRelationshipCard).join("");
-  } catch (error) {
-    $("#relationshipList").innerHTML = `<div class="panel"><p class="heat">AI request failed. Check the key/model, then try again.</p><p class="muted">${error.message}</p></div>`;
+  if (!state.ai.key) {
+    alert("No AI key saved. Building local relationship arc summaries instead.");
+  }
+  for (const button of buttons) {
+    await summarizeRelationshipArc(button.dataset.arcSummary, button);
   }
 }
 
@@ -1799,12 +1901,14 @@ async function pushHubspot() {
 function setupSettings() {
   $("#aiKey").value = state.ai.key || "";
   $("#aiModel").value = state.ai.model || "gpt-4o-mini";
+  if ($("#aiBaseUrl")) $("#aiBaseUrl").value = state.ai.baseUrl || DEFAULT_AI_BASE_URL;
   $("#hubspotToken").value = state.hubspot.token || "";
   renderSettingsStatus();
   renderWeightControls();
   $("#saveAi").addEventListener("click", () => {
     state.ai.key = $("#aiKey").value.trim();
-    state.ai.model = $("#aiModel").value.trim();
+    state.ai.model = $("#aiModel").value.trim() || "gpt-4o-mini";
+    state.ai.baseUrl = ($("#aiBaseUrl")?.value || "").trim() || DEFAULT_AI_BASE_URL;
     saveState();
     renderSettingsStatus();
     alert("AI settings saved in this browser.");

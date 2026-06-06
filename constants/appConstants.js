@@ -1,4 +1,5 @@
 const STORAGE_KEY = "grain-conference-os";
+const DEFAULT_AI_BASE_URL = "https://api.openai.com/v1";
 const SIDEBAR_KEY = "grain-conference-sidebar";
 const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 380;

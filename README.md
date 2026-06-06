@@ -31,8 +31,9 @@ The app is intentionally built around a salesperson's workflow:
 - ICP scoring that emphasizes PSP/payment density, FX exposure, buyer density, seniority, travel-wholesaler relevance, and cost.
 - Planning view that highlights monthly coverage, under-invested verticals, and 30-day trip clusters.
 - Fast capture form for show-floor use, with only the fields a rep can realistically log between conversations.
-- Cross-conference relationship tracking using email, normalized names, company similarity, initials, and fuzzy edit distance.
-- Optional AI feature for relationship summaries and follow-up guidance.
+- Cross-conference relationship tracking with confidence-banded matching: high-confidence matches merge automatically (transitive, order-independent), borderline matches surface as a "possible same person" prompt for the rep to confirm, and email-domain changes are flagged as likely job changes.
+- A relationship signal driven by the sentiment/urgency trajectory across encounters, not a raw repeat count, so a warming buyer reads differently from a polite long-cycle tire-kicker.
+- Optional AI feature for inline, per-contact relationship-arc summaries (cached so an unchanged contact is never re-billed) and follow-up guidance, with a transparent local fallback.
 - HubSpot CSV export plus optional direct contact creation with a user-provided private app token.
 
 ## Scoring logic
@@ -45,7 +46,7 @@ Tier A is for events worth senior coverage or sponsorship consideration. Tier B 
 
 No API keys are hardcoded. Settings are stored only in the user's browser local storage.
 
-- AI: OpenAI-compatible chat completions endpoint, configurable key and model.
+- AI: OpenAI-compatible chat completions endpoint, with configurable API base URL, key, and model (works with OpenAI, Azure OpenAI, or any compatible gateway, so lead data can stay with an approved provider).
 - HubSpot: private app token supplied in the Settings view.
 
 ## Sample data notes
