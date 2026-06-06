@@ -567,26 +567,31 @@ async function runScoutSearch() {
   scoutState.loading = true;
   $("#scoutStatus").textContent = "Building structured conference candidates...";
   renderScoutResults();
+  const dateRange = parseScoutDateRange(prompt);
   try {
-    const rawResults = state.ai.key ? await fetchAiScoutResults(prompt) : localScoutResults(prompt);
+    const rawResults = state.ai.key ? await fetchAiScoutResults(prompt, dateRange) : localScoutResults(prompt, dateRange);
     $("#scoutStatus").textContent = "Verifying candidate source websites...";
-    scoutState.results = await processScoutResults(rawResults);
+    scoutState.results = await processScoutResults(rawResults, dateRange);
     $("#scoutStatus").textContent = scoutState.results.length
-      ? `${scoutState.results.length} validated candidates ready.`
-      : "No candidates passed live website and 2026/2027 validation.";
+      ? `${scoutState.results.length} source-verified candidates ready.`
+      : scoutEmptyStateMessage();
   } catch (error) {
     $("#scoutStatus").textContent = "AI scout failed. Verifying local candidates...";
-    scoutState.results = await processScoutResults(localScoutResults(prompt));
+    scoutState.results = await processScoutResults(localScoutResults(prompt, dateRange), dateRange);
     $("#scoutStatus").textContent = scoutState.results.length
-      ? `AI unavailable. ${scoutState.results.length} locally sourced candidates passed live website verification.`
-      : "AI unavailable and no local candidates passed live website verification.";
+      ? `AI unavailable. ${scoutState.results.length} local candidates passed source verification.`
+      : scoutEmptyStateMessage();
   } finally {
     scoutState.loading = false;
     renderScoutResults();
   }
 }
 
-async function fetchAiScoutResults(prompt) {
+function scoutEmptyStateMessage() {
+  return "No verified conferences found for this specific timeframe. Try broadening your vertical terms or check if the target regional events have announced their 2026/2027 schedules yet.";
+}
+
+async function fetchAiScoutResults(prompt, dateRange) {
   const content = await aiChat(
     [
       {
@@ -595,8 +600,10 @@ async function fetchAiScoutResults(prompt) {
           "You are Grain's Proactive AI Pipeline Scout.",
           "Return only JSON with an events array.",
           "Each event must have name, startDate, endDate, city, country, region, verticals, audience, seniority, buyerDensity, fxRelevance, travelRelevance, pspRelevance, costTier, source, and pitchHook.",
+          "Also return recurringAnnual, historicalMonth, and dateConfirmed when exact future dates are not announced.",
           "All evaluation criteria must use integers from 1 to 10.",
-          "Only include realistic conference dates in 2026 or 2027.",
+          `Only include events overlapping ${dateRange.startDate} through ${dateRange.endDate}.`,
+          "For a known annual event with unannounced dates, set dateConfirmed to false and use its historical month block.",
           "Prioritize PSPs, payments, travel wholesalers, CFOs, treasurers, finance leaders, and enterprise FX exposure."
         ].join(" ")
       },
@@ -604,6 +611,7 @@ async function fetchAiScoutResults(prompt) {
         role: "user",
         content: JSON.stringify({
           prompt,
+          dateRange,
           existingEvents: state.conferences.map((event) => ({
             id: event.id,
             name: event.name,
@@ -620,155 +628,47 @@ async function fetchAiScoutResults(prompt) {
   return JSON.parse(content || "{}").events || [];
 }
 
-function localScoutResults(prompt) {
-  const wantsTravel = /travel|wholesale|tour|airline/i.test(prompt);
-  const wantsQ3 = /july|august|september|q3/i.test(prompt);
-  const candidates = [
-    {
-      name: "GBTA Convention 2026",
-      startDate: "2026-07-20",
-      endDate: "2026-07-22",
-      city: "Denver",
-      country: "USA",
-      region: "North America",
-      verticals: ["Travel", "Travel Tech", "Wholesalers", "Corporate Travel"],
-      audience: 5300,
-      seniority: 8,
-      buyerDensity: 8,
-      fxRelevance: 10,
-      travelRelevance: 10,
-      pspRelevance: 4,
-      costTier: 6,
-      source: "https://www.gbta.org/convention",
-      pitchHook: "Corporate travel buyers and wholesale operators face live currency-margin exposure across global supplier contracts. Emphasize Grain's automated hedging workflows and forward booking controls."
-    },
-    {
-      name: "Skift Global Forum 2026",
-      startDate: "2026-09-16",
-      endDate: "2026-09-18",
-      city: "New York",
-      country: "USA",
-      region: "North America",
-      verticals: ["Travel", "Hospitality", "Airlines", "Wholesalers"],
-      audience: 1400,
-      seniority: 10,
-      buyerDensity: 8,
-      fxRelevance: 8,
-      travelRelevance: 10,
-      pspRelevance: 4,
-      costTier: 6,
-      source: "https://skift.com/events/",
-      pitchHook: "Travel executives are actively comparing margin protection strategies for international inventory. Lead with CFO-level volatility control and faster booking-policy enforcement."
-    },
-    {
-      name: "BTN Group Business Travel Show America 2026",
-      startDate: "2026-08-12",
-      endDate: "2026-08-13",
-      city: "New York",
-      country: "USA",
-      region: "North America",
-      verticals: ["Travel", "Corporate Travel", "SaaS", "Wholesalers"],
-      audience: 2200,
-      seniority: 8,
-      buyerDensity: 8,
-      fxRelevance: 8,
-      travelRelevance: 10,
-      pspRelevance: 4,
-      costTier: 4,
-      source: "https://www.businesstravelshowamerica.com/",
-      pitchHook: "Managed travel and supplier-payment teams are exposed to FX slippage across negotiated global programs. Position Grain as the control layer between forecasted bookings and treasury execution."
-    },
-    {
-      name: "Money 20/20 Europe",
-      startDate: "2026-06-02",
-      endDate: "2026-06-04",
-      city: "Amsterdam",
-      country: "Netherlands",
-      region: "Europe",
-      verticals: ["Payments", "Fintech", "Banking"],
-      audience: 7400,
-      seniority: 10,
-      buyerDensity: 10,
-      fxRelevance: 10,
-      travelRelevance: 4,
-      pspRelevance: 10,
-      costTier: 8,
-      source: "https://europe.money2020.com/",
-      pitchHook: "This is already represented in the active directory and should be deduped rather than inserted again."
-    }
-  ];
-  return candidates.filter((event) => !wantsTravel || event.verticals.some((vertical) => /travel|wholesale|airline/i.test(vertical)))
-    .filter((event) => !wantsQ3 || ["2026-07", "2026-08", "2026-09"].some((prefix) => event.startDate.startsWith(prefix)));
-}
-
-async function processScoutResults(events) {
+async function processScoutResults(events, dateRange) {
   const candidates = (Array.isArray(events) ? events : [])
-    .map(sanitizeScoutEvent)
+    .map((event) => sanitizeScoutEvent(event, dateRange))
     .filter(Boolean)
-    .filter((event) => validateScoutDate(event.startDate) && validateScoutDate(event.endDate));
+    .filter((event) => scoutDateWithinRange(event, dateRange));
   const verificationResults = await Promise.all(candidates.map(async (event) => ({
     event,
-    verified: await verifyScoutSource(event.source)
+    verification: await verifyScoutCandidateSource(event.source, event)
   })));
   return verificationResults
-    .filter(({ verified }) => verified)
-    .map(({ event }) => {
-      const duplicate = findDuplicateConference(event);
+    .filter(({ verification }) => verification.live)
+    .map(({ event, verification }) => {
+      const tentative = event.tentative || !verification.datesConfirmed;
+      const hydratedEvent = {
+        ...event,
+        tentative,
+        verificationStatus: tentative ? "Tentative" : "Verified",
+        status: tentative ? "Considering" : event.status
+      };
+      const duplicate = findDuplicateConference(hydratedEvent);
       return {
-        event,
+        event: hydratedEvent,
         duplicate,
-        pitchHook: event.pitchHook || scoutPitchHook(event),
-        piggyback: duplicate ? "" : piggybackOpportunity(event)
+        pitchHook: hydratedEvent.pitchHook || scoutPitchHook(hydratedEvent),
+        piggyback: duplicate ? "" : piggybackOpportunity(hydratedEvent)
       };
     });
 }
 
-async function verifyScoutSource(value) {
-  let url;
-  try {
-    url = new URL(String(value || "").trim());
-  } catch (error) {
-    return false;
-  }
-  if (url.protocol !== "https:" || !url.hostname.includes(".")) return false;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 7000);
-  try {
-    let response = await fetch(url.href, {
-      method: "HEAD",
-      redirect: "follow",
-      cache: "no-store",
-      signal: controller.signal
-    });
-    if (response.status === 405 || response.status === 501) {
-      response = await fetch(url.href, {
-        method: "GET",
-        redirect: "follow",
-        cache: "no-store",
-        signal: controller.signal
-      });
-    }
-    if (!response.ok) return false;
-    const finalUrl = new URL(response.url || url.href);
-    return finalUrl.protocol === "https:" && !/(?:^|\/)(?:404|not-found|error)(?:\/|$)/i.test(finalUrl.pathname);
-  } catch (error) {
-    return false;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function sanitizeScoutEvent(event) {
+function sanitizeScoutEvent(event, dateRange) {
   if (!event || typeof event !== "object") return null;
   const name = String(event.name || "").trim();
-  const startDate = String(event.startDate || "").slice(0, 10);
-  const endDate = String(event.endDate || startDate).slice(0, 10);
-  if (!name || !startDate) return null;
+  const dates = normalizeScoutEventDates(event, dateRange);
+  if (!name || !dates) return null;
   return {
-    id: uniqueConferenceId(name, startDate),
+    id: uniqueConferenceId(name, dates.startDate),
     name,
-    startDate,
-    endDate,
+    startDate: dates.startDate,
+    endDate: dates.endDate,
+    tentative: dates.tentative,
+    dateConfirmed: event.dateConfirmed !== false,
     city: titleCase(String(event.city || "TBD").trim()),
     country: titleCase(String(event.country || "TBD").trim()),
     region: titleCase(String(event.region || "Global").trim()),
@@ -789,12 +689,6 @@ function sanitizeScoutEvent(event) {
 
 function clampRating(value, fallback) {
   return Math.max(1, Math.min(10, Math.round(Number(value) || fallback)));
-}
-
-function validateScoutDate(value) {
-  const date = new Date(`${value}T00:00:00`);
-  const year = date.getFullYear();
-  return Number.isFinite(date.getTime()) && year >= 2026 && year <= 2027;
 }
 
 function uniqueConferenceId(name, startDate) {
@@ -1497,33 +1391,6 @@ function renderScoutResults() {
   });
 }
 
-function renderScoutResultCard(result) {
-  const event = result.event;
-  const score = scoreConference(event);
-  const tier = tierFor(score);
-  const duplicate = result.duplicate;
-  const eventTitle = event.source
-    ? `<a class="scout-title-link" href="${escapeHtml(event.source)}" target="_blank" rel="noreferrer">${escapeHtml(event.name)}</a>`
-    : `<strong>${escapeHtml(event.name)}</strong>`;
-  return `<div class="scout-card ${duplicate ? "scout-card-duplicate" : ""}">
-    <div class="scout-card-head">
-      <div>
-        ${eventTitle}
-        <span>${escapeHtml(formatDateRange(event))} | ${escapeHtml(event.city)}, ${escapeHtml(event.country)}</span>
-      </div>
-      <span class="tier-flag tier-${tier.toLowerCase()}">Tier ${tier} - Score: ${score}</span>
-    </div>
-    <div class="scout-meta-grid">
-      <span>${escapeHtml(event.region)}</span>
-      <span>${Number(event.audience || 0).toLocaleString()} attendees</span>
-      <span>${escapeHtml((event.verticals || []).join(", "))}</span>
-    </div>
-    <p class="scout-hook">${escapeHtml(result.pitchHook)}</p>
-    ${result.piggyback ? `<span class="piggyback-badge">💡 Trip Piggyback Opportunity: ${escapeHtml(result.piggyback)}</span>` : ""}
-    ${duplicate ? `<p class="muted">Semantic match found: ${escapeHtml(duplicate.name)}. Directory insertion is blocked to prevent duplication.</p>` : `<button class="primary-button" type="button" data-add-scout-event="${escapeHtml(event.id)}">➕ Add to Active Directory</button>`}
-  </div>`;
-}
-
 function renderGapSegmentFilter(verticals) {
   const menu = $("#gapSegmentFilter");
   const button = $("#gapSegmentButton");
@@ -1752,6 +1619,7 @@ function renderArcSummary(slot, summary, trigger = slot.previousElementSibling) 
     trigger.textContent = "Generate AI summary";
     trigger.setAttribute("aria-expanded", "true");
     trigger.disabled = true;
+    trigger.hidden = true;
   }
   slot.querySelector(".ai-summary-close")?.addEventListener("click", () => hideArcSummary(slot, trigger));
 }
@@ -1763,6 +1631,7 @@ function hideArcSummary(slot, trigger = slot.previousElementSibling) {
   if (trigger) {
     trigger.setAttribute("aria-expanded", "false");
     trigger.disabled = false;
+    trigger.hidden = false;
   }
 }
 
@@ -1794,6 +1663,7 @@ async function summarizeRelationshipArc(encodedIds, button) {
     return;
   }
   button.disabled = true;
+  button.hidden = true;
   button.textContent = state.ai.key ? "Summarizing..." : "Building...";
   slot.innerHTML = `<span>${escapeHtml(state.ai.key ? "Generating an AI summary..." : "Building a local summary...")}</span>`;
   let summary;

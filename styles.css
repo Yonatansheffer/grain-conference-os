@@ -1267,6 +1267,18 @@ tbody tr:hover {
   margin: 0 0 3px;
 }
 
+.scout-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scout-status-tentative {
+  background: var(--gold-2);
+  color: var(--gold);
+}
+
 .scout-title-link {
   display: inline-block;
   margin: 0 0 3px;
@@ -1284,6 +1296,14 @@ tbody tr:hover {
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
+}
+
+.scout-card-head .status-active {
+  color: var(--green);
+}
+
+.scout-card-head .scout-status-tentative {
+  color: var(--gold);
 }
 
 .tier-flag {

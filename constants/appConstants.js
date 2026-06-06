@@ -23,11 +23,11 @@ const SIDEBAR_MAX = 380;
 const STATUS_OPTIONS = ["Committed", "Considering", "Watchlist"];
 const TEAM_OPTIONS = ["Maya", "Noah", "Lior", "Dana", "Alex"];
 const DEFAULT_SCORE_WEIGHTS = {
-  industryFit: 80,
-  fxExposurePain: 85,
-  decisionMakerSeniority: 75,
-  audienceScale: 55,
-  travelBudgetRoi: 60
+  industryFit: 100,
+  fxExposurePain: 100,
+  decisionMakerSeniority: 50,
+  audienceScale: 35,
+  travelBudgetRoi: 10
 };
 const SCORE_WEIGHT_LABELS = {
   industryFit: "ICP Industry Fit",
