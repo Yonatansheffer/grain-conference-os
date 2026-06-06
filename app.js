@@ -919,7 +919,7 @@ function renderConferenceRows() {
 
 function renderAddConferenceRow() {
   return `<tr class="add-conference-row">
-    <td colspan="9">
+    <td colspan="8">
       <button id="addConferenceRowButton" class="add-conference-row-button" type="button">
         <span aria-hidden="true">+</span>
         Add New Event
@@ -1375,6 +1375,7 @@ function renderGapCard(vertical) {
     </div>
     <p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}.</p>
     ${status}
+    ${renderVerticalScoutUtility(vertical)}
   </div>`;
 }
 
@@ -1389,25 +1390,23 @@ function gapCardStatus({ vertical, fullyCovered, dataGap, underInvested, uncommi
   }
   if (dataGap) {
     return `<p class="gap-status heat">Under-invested: critical pipeline gap.</p>
-      ${renderSegmentGapAlert(vertical)}`;
+      <p class="muted">No known ${escapeHtml(vertical)} events are currently listed in the directory.</p>`;
   }
   if (underInvested && uncommitted.length) {
     const eventIds = uncommitted.map((conference) => conference.id).join(",");
     return `<p class="gap-status heat">Under-invested: local opportunities available.</p>
       <p class="muted gap-cost">Missing out on ${missedReach.toLocaleString()} potential reach across ${uncommitted.length} uncommitted events.</p>
-      <button class="gap-action" type="button" data-gap-opportunities="${escapeHtml(vertical)}" data-gap-event-ids="${escapeHtml(eventIds)}">View Opportunities</button>`;
+      <button class="gap-action" type="button" data-gap-opportunities="${escapeHtml(vertical)}" data-gap-event-ids="${escapeHtml(eventIds)}">View Opportunities in Table</button>`;
   }
   return `<p class="gap-status muted">Coverage looks proportional.</p>`;
 }
 
-function renderSegmentGapAlert(segmentName) {
-  return `<div class="gap-alert-card segment-gap-alert">
-    <div>
-      <span class="eyebrow">AI Gap Alert</span>
-      <h3>&#9888;&#65039; AI Gap Alert</h3>
-      <p>0 ${escapeHtml(segmentName)}-related events scheduled for the upcoming period. This creates a critical pipeline risk for our core enterprise ${escapeHtml(segmentName)} target audience.</p>
-    </div>
-    <button class="primary-button" type="button" data-gap-scout="${escapeHtml(segmentName)}">&#10024; Run AI Event Discovery</button>
+function renderVerticalScoutUtility(segmentName) {
+  return `<div class="vertical-scout-utility">
+    <button type="button" data-gap-scout="${escapeHtml(segmentName)}">
+      <span aria-hidden="true">&#128269;</span>
+      Discover more events in this vertical via AI Scout
+    </button>
   </div>`;
 }
 

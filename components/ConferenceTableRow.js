@@ -14,14 +14,23 @@ function renderConferenceRow(conference, score, tier) {
       <div class="score-bar"><div class="score-fill score-fill-tier-${tier.toLowerCase()}" style="width:${score}%"></div></div>
       <span class="score-tooltip" id="score-rationale-${conference.id}" role="tooltip">${escapeHtml(rationale)}</span>
     </div></td>
-    <td>${renderTeamSelect(conference)}</td>
-    <td>${renderStatusSelect(conference)}</td>
+    <td class="status-team-cell">${renderStatusTeamCell(conference)}</td>
     <td class="row-actions-cell">
       <button class="row-delete-button" type="button" data-delete-conference="${conference.id}" data-row-action aria-label="Delete ${escapeHtml(conference.name)}" title="Delete conference">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
       </button>
     </td>
   </tr>`;
+}
+
+function renderStatusTeamCell(conference) {
+  return `<div class="status-team-stack">
+    ${renderStatusSelect(conference)}
+    ${conference.status === "Committed" ? `<div class="committed-team-control">
+      <span class="status-team-label">Team</span>
+      ${renderTeamSelect(conference)}
+    </div>` : ""}
+  </div>`;
 }
 
 function renderStatusSelect(conference) {

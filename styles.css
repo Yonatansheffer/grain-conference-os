@@ -371,7 +371,7 @@ button {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
   gap: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .metric,
@@ -835,18 +835,18 @@ tbody tr:hover {
 }
 
 .tier-a {
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--green-2);
+  color: var(--green);
 }
 
 .tier-b {
-  background: var(--blue-2);
-  color: var(--blue);
+  background: var(--gold-2);
+  color: var(--gold);
 }
 
 .tier-c {
-  background: var(--gold-2);
-  color: var(--gold);
+  background: #f7e5eb;
+  color: #861f41;
 }
 
 .status-committed {
@@ -891,15 +891,15 @@ tbody tr:hover {
 }
 
 .score-fill-tier-a {
-  background: var(--primary);
+  background: var(--green);
 }
 
 .score-fill-tier-b {
-  background: var(--blue);
+  background: var(--gold);
 }
 
 .score-fill-tier-c {
-  background: var(--gold);
+  background: #861f41;
 }
 
 .score-with-tooltip {
@@ -1030,6 +1030,29 @@ tbody tr:hover {
   min-width: 140px;
 }
 
+.status-team-cell {
+  min-width: 172px;
+}
+
+.status-team-stack {
+  display: grid;
+  gap: 7px;
+}
+
+.committed-team-control {
+  display: grid;
+  gap: 4px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+
+.status-team-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .team-editor {
   position: relative;
 }
@@ -1096,51 +1119,6 @@ tbody tr:hover {
 .panel {
   padding: 18px;
   margin-bottom: 16px;
-}
-
-.pipeline-gap-alert:empty {
-  display: none;
-}
-
-.gap-alert-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 18px;
-  margin: 0 0 14px;
-  padding: 16px;
-  border: 1px solid #f2c273;
-  border-radius: 8px;
-  background: #fff8e6;
-  box-shadow: var(--shadow);
-}
-
-.gap-alert-card h3,
-.gap-alert-card p {
-  margin: 0;
-}
-
-.gap-alert-card p {
-  margin-top: 6px;
-  color: #6f5514;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.gap-alert-card .primary-button {
-  flex: 0 0 auto;
-}
-
-.segment-gap-alert {
-  display: grid;
-  gap: 10px;
-  margin: 2px 0 0;
-  padding: 12px;
-  box-shadow: none;
-}
-
-.segment-gap-alert .primary-button {
-  justify-self: start;
 }
 
 .scout-panel {
@@ -1227,18 +1205,18 @@ tbody tr:hover {
 }
 
 .tier-flag.tier-a {
-  background: #e5f8ed;
-  color: #16723b;
+  background: var(--green-2);
+  color: var(--green);
 }
 
 .tier-flag.tier-b {
-  background: var(--blue-2);
-  color: var(--blue);
+  background: var(--gold-2);
+  color: var(--gold);
 }
 
 .tier-flag.tier-c {
-  background: var(--gold-2);
-  color: var(--gold);
+  background: #f7e5eb;
+  color: #861f41;
 }
 
 .scout-meta-grid {
@@ -1954,6 +1932,31 @@ tbody tr:hover {
 
 .gap-action:hover {
   background: #d2f2eb;
+}
+
+.vertical-scout-utility {
+  margin-top: 3px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.vertical-scout-utility button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: left;
+}
+
+.vertical-scout-utility button:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .capture-layout {
@@ -2672,7 +2675,6 @@ textarea:focus {
     text-align: left;
   }
 
-  .gap-alert-card,
   .scout-head,
   .scout-card-head {
     align-items: stretch;
