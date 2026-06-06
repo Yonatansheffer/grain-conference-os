@@ -447,11 +447,11 @@ button {
   grid-template-columns: 2fr repeat(3, minmax(130px, 1fr));
   gap: 12px;
   align-items: end;
-  margin-bottom: 0;
+  margin-bottom: 20px;
   padding: 14px 16px;
-  background: var(--slate-soft);
+  background: white;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .table-actions {
@@ -601,7 +601,7 @@ textarea {
   flex-wrap: wrap;
   gap: 6px;
   min-height: 24px;
-  margin: 0 0 14px;
+  margin: -10px 0 14px;
 }
 
 .active-filter-chips:empty {
@@ -955,11 +955,18 @@ tbody tr:hover {
 }
 
 .row-actions-cell {
-  width: 54px;
+  position: relative;
+  width: 48px;
   text-align: center;
 }
 
-.row-delete-button {
+.actions-header {
+  width: 48px;
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
+.row-menu-button {
   width: 32px;
   height: 32px;
   display: inline-grid;
@@ -970,20 +977,60 @@ tbody tr:hover {
   color: var(--muted);
 }
 
-.row-delete-button:hover {
-  border-color: #f0c6be;
-  background: #fff5f2;
+.row-menu-button:hover,
+.row-menu-button[aria-expanded="true"] {
+  border-color: #c8e4ee;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.row-menu-button svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.row-action-menu {
+  position: absolute;
+  z-index: 18;
+  top: calc(50% + 18px);
+  left: 10px;
+  display: none;
+  width: 150px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 12px 30px rgba(16, 38, 58, 0.16);
+}
+
+.row-action-menu.open {
+  display: grid;
+}
+
+.row-action-menu button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 0;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.row-action-menu button:hover {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.row-action-menu .danger-action {
   color: var(--red);
 }
 
-.row-delete-button svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.row-action-menu .danger-action:hover {
+  background: #fff5f2;
 }
 
 .add-conference-row td {
@@ -1368,12 +1415,26 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
+.calendar-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-footer {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
 .calendar-commit-toggle {
   display: inline-flex;
   grid-template-columns: none;
   align-items: center;
   gap: 7px;
-  margin-right: 4px;
+  margin-right: 0;
   color: var(--ink);
   font-size: 12px;
   font-weight: 800;
@@ -1710,6 +1771,12 @@ tbody tr:hover {
 
 .cluster-head strong {
   margin: 0;
+}
+
+.cluster-head .cluster-date-range {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .cluster-head span {
@@ -2761,6 +2828,10 @@ textarea:focus {
   .table-actions button {
     flex: 1 1 180px;
   }
+}
+
+.ai-model-field[hidden] {
+  display: none;
 }
 
 @media (max-width: 620px) {

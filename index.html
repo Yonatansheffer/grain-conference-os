@@ -71,7 +71,7 @@
             <table>
               <thead>
                 <tr>
-                  <th>Actions</th>
+                  <th class="actions-header" aria-label="Row actions"></th>
                   <th><button class="sort-button" type="button" data-sort="name">Conference</button></th>
                   <th><button class="sort-button" type="button" data-sort="date">Date</button></th>
                   <th><button class="sort-button" type="button" data-sort="location">Location</button></th>
@@ -112,20 +112,22 @@
 
         <section id="planning" class="view">
           <div class="planning-grid">
-            <div class="panel">
+            <div class="panel calendar-panel">
               <div class="panel-head">
                 <h3>Event Calendar</h3>
                 <div class="calendar-actions">
-                  <label class="calendar-commit-toggle">
-                    <input id="calendarCommittedOnly" type="checkbox">
-                    <span>Show Committed Only</span>
-                  </label>
                   <button id="calendarPrev" class="ghost-button" type="button">Prev</button>
                   <span id="calendarLabel"></span>
                   <button id="calendarNext" class="ghost-button" type="button">Next</button>
                 </div>
               </div>
               <div id="eventCalendar" class="calendar"></div>
+              <div class="calendar-footer">
+                <label class="calendar-commit-toggle">
+                  <input id="calendarCommittedOnly" type="checkbox">
+                  <span>Show Committed Only</span>
+                </label>
+              </div>
             </div>
             <div class="panel">
               <div class="cluster-panel-head">
@@ -310,10 +312,18 @@
                 <p class="muted">Optional. Without a key, the app uses transparent local heuristics. With a key, it drafts relationship summaries and follow-ups from lead notes.</p>
                 <div class="settings-fields">
                   <label>
-                    OpenAI API key
-                    <input id="aiKey" type="password" autocomplete="current-password" placeholder="Stored only in this browser">
+                    AI Provider
+                    <select id="aiProvider">
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Google Gemini</option>
+                      <option value="anthropic">Anthropic Claude</option>
+                    </select>
                   </label>
                   <label>
+                    <span id="aiKeyLabel">OpenAI API Key</span>
+                    <input id="aiKey" type="password" autocomplete="current-password" placeholder="Stored only in this browser">
+                  </label>
+                  <label id="aiModelField" class="ai-model-field" hidden>
                     Model
                     <select id="aiModel"></select>
                   </label>
@@ -366,7 +376,7 @@
         <div class="modal-head">
           <span class="eyebrow">Conference database</span>
           <h3 id="addConferenceTitle">Add Conference</h3>
-          <p class="muted">Create a new event row with enough context to score, filter, and plan coverage.</p>
+          <p id="conferenceFormDescription" class="muted">Create a new event row with enough context to score, filter, and plan coverage.</p>
         </div>
         <form id="addConferenceForm" class="conference-form">
           <div class="two-col">
@@ -450,7 +460,7 @@
           </div>
           <div class="modal-actions">
             <button class="ghost-button" type="button" data-close-modal>Cancel</button>
-            <button class="primary-button" type="submit">Add to table</button>
+            <button id="conferenceFormSubmit" class="primary-button" type="submit">Add to table</button>
           </div>
         </form>
       </div>

@@ -1,5 +1,22 @@
 const STORAGE_KEY = "grain-conference-os";
-const DEFAULT_API_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_AI_PROVIDER = "openai";
+const AI_PROVIDER_CONFIG = {
+  openai: {
+    label: "OpenAI",
+    modelsUrl: "https://api.openai.com/v1/models",
+    messagesUrl: "https://api.openai.com/v1/chat/completions"
+  },
+  gemini: {
+    label: "Google Gemini",
+    modelsUrl: "https://generativelanguage.googleapis.com/v1beta/models",
+    messagesUrl: "https://generativelanguage.googleapis.com/v1beta/models"
+  },
+  anthropic: {
+    label: "Anthropic Claude",
+    modelsUrl: "https://api.anthropic.com/v1/models",
+    messagesUrl: "https://api.anthropic.com/v1/messages"
+  }
+};
 const SIDEBAR_KEY = "grain-conference-sidebar";
 const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 380;

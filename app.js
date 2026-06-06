@@ -21,6 +21,7 @@ let scoutRecognition = null;
 let isRecordingScout = false;
 let scoutMediaRecorder = null;
 let scoutAudioChunks = [];
+let editingConferenceId = "";
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -34,7 +35,7 @@ function loadState() {
   return {
     conferences: clone(CONFERENCES),
     leads: clone(LEADS),
-    ai: { key: "", model: "" },
+    ai: { provider: DEFAULT_AI_PROVIDER, key: "", model: "" },
     hubspot: { token: "" },
     scoringWeights: clone(DEFAULT_SCORE_WEIGHTS)
   };
@@ -42,7 +43,8 @@ function loadState() {
 
 function migrateState(loaded) {
   loaded = loaded || {};
-  loaded.ai = loaded.ai || { key: "", model: "" };
+  loaded.ai = loaded.ai || { provider: DEFAULT_AI_PROVIDER, key: "", model: "" };
+  loaded.ai.provider = AI_PROVIDER_CONFIG[loaded.ai.provider] ? loaded.ai.provider : DEFAULT_AI_PROVIDER;
   loaded.ai.model = loaded.ai.model || (loaded.ai.key ? "gpt-4o-mini" : "");
   delete loaded.ai.baseUrl;
   loaded.hubspot = loaded.hubspot || { token: "", lastSuccessfulSync: "" };
@@ -450,23 +452,78 @@ function setupPlanningControls() {
   $("#scoutMic")?.addEventListener("click", toggleScoutVoicePrompt);
 }
 
-// Single place that talks to the selected OpenAI model.
 async function aiChat(messages, { json = false } = {}) {
-  const response = await fetch(`${DEFAULT_API_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${state.ai.key}`
-    },
-    body: JSON.stringify({
-      model: state.ai.model || "gpt-4o-mini",
-      ...(json ? { response_format: { type: "json_object" } } : {}),
-      messages
-    })
-  });
+  const provider = state.ai.provider || DEFAULT_AI_PROVIDER;
+  const request = buildAiMessageRequest(provider, messages, json);
+  const response = await fetch(request.url, request.options);
   if (!response.ok) throw new Error(await response.text());
   const data = await response.json();
+  if (provider === "gemini") return data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+  if (provider === "anthropic") return data.content?.map((part) => part.text || "").join("") || "";
   return data.choices?.[0]?.message?.content || "";
+}
+
+function buildAiMessageRequest(provider, messages, json) {
+  const config = AI_PROVIDER_CONFIG[provider];
+  if (provider === "gemini") {
+    const systemInstruction = messages.filter((message) => message.role === "system").map((message) => message.content).join("\n\n");
+    const contents = messages
+      .filter((message) => message.role !== "system")
+      .map((message) => ({
+        role: message.role === "assistant" ? "model" : "user",
+        parts: [{ text: String(message.content || "") }]
+      }));
+    return {
+      url: `${config.messagesUrl}/${encodeURIComponent(state.ai.model)}:generateContent?key=${encodeURIComponent(state.ai.key)}`,
+      options: {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {}),
+          contents,
+          ...(json ? { generationConfig: { responseMimeType: "application/json" } } : {})
+        })
+      }
+    };
+  }
+  if (provider === "anthropic") {
+    const system = messages.filter((message) => message.role === "system").map((message) => message.content).join("\n\n");
+    return {
+      url: config.messagesUrl,
+      options: {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": state.ai.key,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+          model: state.ai.model,
+          max_tokens: 2048,
+          ...(system ? { system: json ? `${system}\n\nReturn valid JSON only.` : system } : {}),
+          messages: messages
+            .filter((message) => message.role !== "system")
+            .map((message) => ({ role: message.role === "assistant" ? "assistant" : "user", content: String(message.content || "") }))
+        })
+      }
+    };
+  }
+  return {
+    url: config.messagesUrl,
+    options: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${state.ai.key}`
+      },
+      body: JSON.stringify({
+        model: state.ai.model,
+        ...(json ? { response_format: { type: "json_object" } } : {}),
+        messages
+      })
+    }
+  };
 }
 
 async function runScoutSearch() {
@@ -758,7 +815,11 @@ function toggleScoutVoicePrompt() {
 async function toggleScoutWhisperRecording() {
   const button = $("#scoutMic");
   if (!state.ai.key) {
-    $("#scoutStatus").textContent = "Save an OpenAI-compatible API key to use Whisper transcription, or type the scout prompt.";
+    $("#scoutStatus").textContent = "Save an OpenAI key to use Whisper transcription, or type the scout prompt.";
+    return;
+  }
+  if (state.ai.provider !== "openai") {
+    $("#scoutStatus").textContent = "Voice transcription currently requires OpenAI. Switch providers or type the scout prompt.";
     return;
   }
   if (isRecordingScout && scoutMediaRecorder) {
@@ -798,7 +859,7 @@ async function transcribeScoutAudio() {
   const formData = new FormData();
   formData.append("model", "whisper-1");
   formData.append("file", audioBlob, "pipeline-scout.webm");
-  const response = await fetch(`${DEFAULT_API_BASE_URL}/audio/transcriptions`, {
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: { Authorization: `Bearer ${state.ai.key}` },
     body: formData
@@ -894,6 +955,12 @@ function renderConferenceRows() {
   $$("[data-row-action]").forEach((control) => {
     control.addEventListener("click", (event) => event.stopPropagation());
   });
+  $$("[data-row-menu-toggle]").forEach((button) => {
+    button.addEventListener("click", () => toggleRowActionMenu(button));
+  });
+  $$("[data-edit-conference]").forEach((button) => {
+    button.addEventListener("click", () => openEditConferenceForm(button.dataset.editConference));
+  });
   $$("[data-delete-conference]").forEach((button) => {
     button.addEventListener("click", () => deleteConference(button.dataset.deleteConference));
   });
@@ -917,6 +984,20 @@ function renderConferenceRows() {
   if (!items.some((c) => c.id === selectedConferenceId)) selectedConferenceId = items[0]?.id;
 }
 
+function toggleRowActionMenu(button) {
+  const menu = document.querySelector(`[data-row-menu="${CSS.escape(button.dataset.rowMenuToggle)}"]`);
+  const willOpen = !menu?.classList.contains("open");
+  closeRowActionMenus();
+  if (!menu || !willOpen) return;
+  menu.classList.add("open");
+  button.setAttribute("aria-expanded", "true");
+}
+
+function closeRowActionMenus() {
+  $$(".row-action-menu.open").forEach((menu) => menu.classList.remove("open"));
+  $$("[data-row-menu-toggle][aria-expanded='true']").forEach((button) => button.setAttribute("aria-expanded", "false"));
+}
+
 function renderAddConferenceRow() {
   return `<tr class="add-conference-row">
     <td colspan="8">
@@ -931,6 +1012,7 @@ function renderAddConferenceRow() {
 function deleteConference(id) {
   const conference = state.conferences.find((item) => item.id === id);
   if (!conference) return;
+  closeRowActionMenus();
   if (conference.status === "Committed") {
     showToast("Cannot delete a committed conference. Please change the status to Considering or Watchlist first.", "warning", { duration: 5200 });
     return;
@@ -2052,7 +2134,7 @@ function downloadCsv(rows, filename) {
 
 function setupConferenceActions() {
   $("#exportConferencesCsv").addEventListener("click", exportConferencesCsv);
-  $("#addConferenceForm").addEventListener("submit", addConferenceFromForm);
+  $("#addConferenceForm").addEventListener("submit", submitConferenceForm);
   $$("[data-close-modal]").forEach((button) => {
     button.addEventListener("click", () => closeModals());
   });
@@ -2062,11 +2144,18 @@ function setupConferenceActions() {
     });
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeModals();
+    if (event.key === "Escape") {
+      closeRowActionMenus();
+      closeModals();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".row-actions-cell")) closeRowActionMenus();
   });
 }
 
 function openAddConferenceForm() {
+  editingConferenceId = "";
   $("#addConferenceForm").reset();
   $("#newConferenceAudience").value = "2500";
   $("#newBuyerDensity").value = "4";
@@ -2075,15 +2164,54 @@ function openAddConferenceForm() {
   $("#newTravelRelevance").value = "3";
   $("#newSeniority").value = "4";
   $("#newCostTier").value = "3";
+  $("#addConferenceTitle").textContent = "Add Conference";
+  $("#conferenceFormDescription").textContent = "Create a new event row with enough context to score, filter, and plan coverage.";
+  $("#conferenceFormSubmit").textContent = "Add to table";
+  document.querySelector("#addConferenceModal .modal-close")?.setAttribute("aria-label", "Close add conference");
   openModal("#addConferenceModal");
 }
 
-function addConferenceFromForm(event) {
+function openEditConferenceForm(id) {
+  const conference = state.conferences.find((item) => item.id === id);
+  if (!conference) return;
+  editingConferenceId = id;
+  closeRowActionMenus();
+  $("#newConferenceName").value = conference.name || "";
+  $("#newConferenceStatus").value = conference.status || "Considering";
+  $("#newConferenceStart").value = conference.startDate || "";
+  $("#newConferenceEnd").value = conference.endDate || conference.startDate || "";
+  $("#newConferenceCity").value = conference.city || "";
+  $("#newConferenceCountry").value = conference.country || "";
+  $("#newConferenceRegion").value = conference.region || "Europe";
+  $("#newConferenceVerticals").value = Array.isArray(conference.verticals) ? conference.verticals.join(", ") : "";
+  $("#newConferenceAudience").value = String(Number(conference.audience) || 100);
+  $("#newConferenceSource").value = conference.source || "";
+  $("#newBuyerDensity").value = String(Number(conference.buyerDensity) || 3);
+  $("#newPspRelevance").value = String(Number(conference.pspRelevance) || 3);
+  $("#newFxRelevance").value = String(Number(conference.fxRelevance) || 3);
+  $("#newTravelRelevance").value = String(Number(conference.travelRelevance) || 3);
+  $("#newSeniority").value = String(Number(conference.seniority) || 3);
+  $("#newCostTier").value = String(Number(conference.costTier) || 3);
+  Array.from($("#newConferenceTeam").options).forEach((option) => {
+    option.selected = Array.isArray(conference.team) && conference.team.includes(option.value);
+  });
+  $("#addConferenceTitle").textContent = "Edit Conference";
+  $("#conferenceFormDescription").textContent = "Update this event's directory, scoring, and coverage details.";
+  $("#conferenceFormSubmit").textContent = "Save changes";
+  document.querySelector("#addConferenceModal .modal-close")?.setAttribute("aria-label", "Close edit conference");
+  openModal("#addConferenceModal");
+}
+
+function submitConferenceForm(event) {
   event.preventDefault();
   const startDate = $("#newConferenceStart").value;
   const endDate = $("#newConferenceEnd").value || startDate;
+  const existingConference = editingConferenceId
+    ? state.conferences.find((conference) => conference.id === editingConferenceId)
+    : null;
   const conference = {
-    id: createConferenceId($("#newConferenceName").value),
+    ...(existingConference || {}),
+    id: existingConference?.id || createConferenceId($("#newConferenceName").value),
     name: $("#newConferenceName").value.trim(),
     startDate,
     endDate: new Date(endDate) < new Date(startDate) ? startDate : endDate,
@@ -2102,7 +2230,11 @@ function addConferenceFromForm(event) {
     source: $("#newConferenceSource").value.trim(),
     team: Array.from($("#newConferenceTeam").selectedOptions).map((option) => option.value)
   };
-  state.conferences.push(conference);
+  if (existingConference) {
+    Object.assign(existingConference, conference);
+  } else {
+    state.conferences.push(conference);
+  }
   selectedConferenceId = conference.id;
   saveState();
   filterState = { vertical: [], region: [], status: [] };
@@ -2110,7 +2242,9 @@ function addConferenceFromForm(event) {
   closeModals();
   renderFilters();
   renderAll();
-  openConferenceDetail(conference.id);
+  showToast(existingConference ? `${conference.name} updated.` : `${conference.name} added.`, "success");
+  if (!existingConference) openConferenceDetail(conference.id);
+  editingConferenceId = "";
 }
 
 function boundedScore(selector) {
@@ -2188,12 +2322,23 @@ async function pushHubspot() {
 }
 
 function setupSettings() {
+  $("#aiProvider").value = state.ai.provider || DEFAULT_AI_PROVIDER;
   $("#aiKey").value = state.ai.key || "";
   const savedModels = state.ai.key && state.ai.model ? [state.ai.model] : [];
   populateAiModelSelect(savedModels, state.ai.model);
+  updateAiProviderFields();
   $("#hubspotToken").value = state.hubspot.token || "";
   renderSettingsStatus();
   renderWeightControls();
+  $("#aiProvider").addEventListener("change", () => {
+    const provider = $("#aiProvider").value;
+    const providerChanged = provider !== state.ai.provider;
+    $("#aiKey").value = providerChanged ? "" : state.ai.key || "";
+    clearAiModelSelect();
+    $("#aiModelError").textContent = "";
+    updateAiProviderFields();
+    renderSettingsStatus();
+  });
   $("#saveAi").addEventListener("click", saveKeyAndLoadModels);
   $("#aiModel").addEventListener("change", (event) => {
     if (!event.currentTarget.value) return;
@@ -2213,6 +2358,7 @@ function setupSettings() {
 }
 
 async function saveKeyAndLoadModels() {
+  const provider = $("#aiProvider").value;
   const key = $("#aiKey").value.trim();
   const button = $("#saveAi");
   const error = $("#aiModelError");
@@ -2226,35 +2372,73 @@ async function saveKeyAndLoadModels() {
   button.disabled = true;
   button.textContent = "Loading models...";
   try {
-    const response = await fetch(`${DEFAULT_API_BASE_URL}/models`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${key}` }
-    });
+    const response = await fetchProviderModels(provider, key);
     if (!response.ok) throw new Error("Model request failed");
     const payload = await response.json();
-    const modelIds = [...new Set((Array.isArray(payload.data) ? payload.data : [])
-      .map((model) => String(model?.id || "").trim())
-      .filter(Boolean))]
+    const modelIds = [...new Set(parseProviderModelIds(provider, payload))]
       .sort((a, b) => a.localeCompare(b));
     if (!modelIds.length) throw new Error("No models returned");
-    const selectedModel = modelIds.includes(state.ai.model)
-      ? state.ai.model
-      : (modelIds.includes("gpt-4o-mini") ? "gpt-4o-mini" : modelIds[0]);
-    state.ai = { key, model: selectedModel };
+    const previousModel = state.ai.provider === provider ? state.ai.model : "";
+    const selectedModel = modelIds.includes(previousModel)
+      ? previousModel
+      : preferredProviderModel(provider, modelIds);
+    state.ai = { provider, key, model: selectedModel };
     saveState();
     populateAiModelSelect(modelIds, selectedModel);
     renderSettingsStatus();
-    showToast("API key validated. Models loaded.", "success");
+    showToast(`${AI_PROVIDER_CONFIG[provider].label} key validated. Models loaded.`, "success");
   } catch (fetchError) {
-    state.ai = { key: "", model: "" };
+    state.ai = { provider, key: "", model: "" };
     saveState();
     clearAiModelSelect();
-    error.textContent = "Could not fetch models. Please check your API key.";
+    error.textContent = `Could not fetch models. Please check your ${AI_PROVIDER_CONFIG[provider].label} API key.`;
     renderSettingsStatus();
   } finally {
     button.disabled = false;
     button.textContent = originalLabel;
   }
+}
+
+function fetchProviderModels(provider, key) {
+  const config = AI_PROVIDER_CONFIG[provider];
+  if (provider === "gemini") {
+    return fetch(`${config.modelsUrl}?key=${encodeURIComponent(key)}`, { method: "GET" });
+  }
+  if (provider === "anthropic") {
+    return fetch(config.modelsUrl, {
+      method: "GET",
+      headers: {
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      }
+    });
+  }
+  return fetch(config.modelsUrl, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${key}` }
+  });
+}
+
+function parseProviderModelIds(provider, payload) {
+  if (provider === "gemini") {
+    return (Array.isArray(payload.models) ? payload.models : [])
+      .filter((model) => !Array.isArray(model.supportedGenerationMethods) || model.supportedGenerationMethods.includes("generateContent"))
+      .map((model) => String(model?.name || "").replace(/^models\//, "").trim())
+      .filter(Boolean);
+  }
+  return (Array.isArray(payload.data) ? payload.data : [])
+    .map((model) => String(model?.id || "").trim())
+    .filter(Boolean);
+}
+
+function preferredProviderModel(provider, modelIds) {
+  const preferences = {
+    openai: ["gpt-4o-mini", "gpt-4.1-mini"],
+    gemini: ["gemini-2.5-flash", "gemini-2.0-flash"],
+    anthropic: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-latest"]
+  };
+  return preferences[provider]?.find((model) => modelIds.includes(model)) || modelIds[0];
 }
 
 function populateAiModelSelect(modelIds, selectedModel = "") {
@@ -2265,19 +2449,27 @@ function populateAiModelSelect(modelIds, selectedModel = "") {
     ? models.map((id) => `<option value="${escapeHtml(id)}" ${id === selectedModel ? "selected" : ""}>${escapeHtml(id)}</option>`).join("")
     : '<option value="">Load models after saving a valid key</option>';
   select.disabled = !models.length;
+  $("#aiModelField").hidden = !models.length;
 }
 
 function clearAiModelSelect() {
   populateAiModelSelect([], "");
 }
 
+function updateAiProviderFields() {
+  const provider = $("#aiProvider")?.value || DEFAULT_AI_PROVIDER;
+  const label = AI_PROVIDER_CONFIG[provider]?.label || AI_PROVIDER_CONFIG[DEFAULT_AI_PROVIDER].label;
+  if ($("#aiKeyLabel")) $("#aiKeyLabel").textContent = `${label} API Key`;
+}
+
 function renderSettingsStatus() {
-  const hasAiKey = Boolean((state.ai.key || "").trim());
+  const selectedProvider = $("#aiProvider")?.value || state.ai.provider || DEFAULT_AI_PROVIDER;
+  const hasAiKey = selectedProvider === state.ai.provider && Boolean((state.ai.key || "").trim());
   const hasHubspotToken = Boolean(($("#hubspotToken")?.value || state.hubspot.token || "").trim());
   const aiBadge = $("#aiStatusBadge");
   const hubspotBadge = $("#hubspotStatusBadge");
   if (aiBadge) {
-    aiBadge.textContent = hasAiKey ? "Active" : "Local Heuristics";
+    aiBadge.textContent = hasAiKey ? `${AI_PROVIDER_CONFIG[state.ai.provider].label} Active` : "Local Heuristics";
     aiBadge.className = `status-badge ${hasAiKey ? "status-active" : "status-muted"}`;
   }
   if (hubspotBadge) {

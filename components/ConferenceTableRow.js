@@ -5,9 +5,13 @@ function renderConferenceRow(conference, score, tier) {
   const rationale = scoreNarrative(conference);
   return `<tr data-id="${conference.id}">
     <td class="row-actions-cell">
-      <button class="row-delete-button" type="button" data-delete-conference="${conference.id}" data-row-action aria-label="Delete ${escapeHtml(conference.name)}" title="Delete conference">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
+      <button class="row-menu-button" type="button" data-row-menu-toggle="${conference.id}" data-row-action aria-label="Options for ${escapeHtml(conference.name)}" title="Event options" aria-haspopup="menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
       </button>
+      <div class="row-action-menu" role="menu" data-row-menu="${conference.id}">
+        <button type="button" role="menuitem" data-edit-conference="${conference.id}" data-row-action>Edit Event</button>
+        <button class="danger-action" type="button" role="menuitem" data-delete-conference="${conference.id}" data-row-action>Delete Event</button>
+      </div>
     </td>
     <td>${conferenceName}</td>
     <td>${escapeHtml(formatDateRange(conference))}</td>

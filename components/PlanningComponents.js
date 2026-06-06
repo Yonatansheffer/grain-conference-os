@@ -15,9 +15,10 @@ function renderTripCluster(cluster) {
   const potential = cluster.events.reduce((sum, event) => sum + scoreConference(event), 0);
   const windowDays = clusterWindowDays(cluster.events);
   const itineraryGap = clusterItineraryGap(cluster.events);
+  const operationRange = clusterOperationRange(cluster.events);
   return `<div class="cluster trip-cluster">
     <div class="cluster-head">
-      <strong>${escapeHtml(cluster.city || cluster.region)} cluster</strong>
+      <strong>${escapeHtml(cluster.city || cluster.region)} cluster <span class="cluster-date-range">(${escapeHtml(operationRange)})</span></strong>
       <span>${committedCount}/${cluster.events.length} committed</span>
     </div>
     <p class="cluster-efficiency">${cluster.events.length} Events in a ${Math.max(windowDays, 1)}-day window | Combined ICP Potential ${potential}</p>
@@ -37,8 +38,23 @@ function renderClusterEvent(event) {
     <small>${escapeHtml(formatDateRange(event))} | ${escapeHtml(event.city)}</small>
     ${committed
       ? '<span class="cluster-commit-confirmation">&#10003; Committed</span>'
-      : `<button class="cluster-inline-add" type="button" data-add-to-trip="${event.id}">Add to Trip: ${escapeHtml(event.name)}</button>`}
+      : `<button class="cluster-inline-add" type="button" data-add-to-trip="${event.id}">Add to Trip</button>`}
   </div>`;
+}
+
+function clusterOperationRange(events) {
+  const starts = events.map((event) => new Date(`${event.startDate}T00:00:00`)).filter((date) => !Number.isNaN(date.getTime()));
+  const ends = events.map((event) => new Date(`${event.endDate || event.startDate}T00:00:00`)).filter((date) => !Number.isNaN(date.getTime()));
+  if (!starts.length || !ends.length) return "Dates unavailable";
+  const start = new Date(Math.min(...starts.map((date) => date.getTime())));
+  const end = new Date(Math.max(...ends.map((date) => date.getTime())));
+  const monthDay = { month: "short", day: "numeric" };
+  if (start.getFullYear() === end.getFullYear()) {
+    const startLabel = start.toLocaleDateString("en-US", monthDay);
+    const endLabel = end.toLocaleDateString("en-US", monthDay);
+    return `${startLabel} - ${endLabel}, ${end.getFullYear()}`;
+  }
+  return `${start.toLocaleDateString("en-US", { ...monthDay, year: "numeric" })} - ${end.toLocaleDateString("en-US", { ...monthDay, year: "numeric" })}`;
 }
 
 function clusterWindowDays(events) {
