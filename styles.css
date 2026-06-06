@@ -1784,79 +1784,14 @@ tbody tr:hover {
   gap: 14px;
 }
 
-.score-profile-picker {
-  display: grid;
-  gap: 8px;
-}
-
-.score-profile-picker > span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.score-profile-presets {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.score-profile-button {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid #c8d9df;
-  border-radius: 999px;
-  padding: 6px 11px;
-  background: white;
-  color: #31556a;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.score-profile-button:hover,
-.score-profile-button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary-dark);
-}
-
 .weight-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.weight-group {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px;
-  background: white;
-}
-
-.weight-group-operational {
-  background: #f6faf9;
-}
-
-.weight-group h4 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 13px;
-}
-
-.weight-group-controls {
   display: grid;
   gap: 8px;
 }
 
 .weight-control {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(120px, 2fr) 70px 76px;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 3fr) 72px 84px;
   gap: 10px;
   align-items: center;
   padding: 9px 10px;
@@ -2433,23 +2368,30 @@ tbody tr:hover {
 }
 
 .lead-registry-table {
-  min-width: 1240px;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.lead-registry-table th,
+.lead-registry-table td {
+  padding: 9px 8px;
+  font-size: 12px;
 }
 
 .lead-registry-table th:nth-child(1) {
-  width: 48px;
+  width: 38px;
 }
 
 .lead-registry-table th:nth-child(2) {
-  width: 18%;
+  width: 16%;
 }
 
 .lead-registry-table th:nth-child(3) {
-  width: 19%;
+  width: 16%;
 }
 
 .lead-registry-table th:nth-child(4) {
-  width: 18%;
+  width: 15%;
 }
 
 .lead-registry-table th:nth-child(5) {
@@ -2457,7 +2399,7 @@ tbody tr:hover {
 }
 
 .lead-registry-table th:nth-child(6) {
-  width: 25%;
+  width: auto;
 }
 
 .lead-actions-cell {
@@ -2484,11 +2426,10 @@ tbody tr:hover {
 }
 
 .lead-contact-info a {
-  max-width: 220px;
+  max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
   text-decoration: none;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .lead-contact-info a[href]:hover {
@@ -2501,9 +2442,11 @@ tbody tr:hover {
 }
 
 .lead-note-cell {
-  max-width: 360px;
+  max-width: none;
   color: #42514a;
-  line-height: 1.4;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .lead-registry-actions {
@@ -2576,6 +2519,7 @@ tbody tr:hover {
 .relationship .actions {
   display: grid;
   gap: 8px;
+  align-content: start;
   min-width: 210px;
 }
 
@@ -2588,12 +2532,17 @@ tbody tr:hover {
 
 .relationship-title strong {
   margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 900;
 }
 
 .relationship-summary {
-  margin: 4px 0 0;
-  color: var(--primary-dark);
-  font-weight: 750;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
 .relationship-timeline {
@@ -2677,8 +2626,10 @@ tbody tr:hover {
 
 .relationship-signal {
   justify-content: center;
-  min-height: 28px;
-  padding: 4px 10px;
+  justify-self: end;
+  min-height: 22px;
+  padding: 2px 8px;
+  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -2803,6 +2754,7 @@ tbody tr:hover {
 }
 
 .relationship-ai-summary {
+  position: relative;
   display: grid;
   gap: 4px;
   margin-top: 10px;
@@ -2814,6 +2766,31 @@ tbody tr:hover {
   color: var(--ink);
   line-height: 1.45;
   white-space: pre-line;
+}
+
+.ai-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-summary-close {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.ai-summary-close:hover {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
 }
 
 .relationship-summary-control {
@@ -3102,10 +3079,6 @@ textarea:focus {
   .weight-control,
   .three-col,
   .score-input-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .weight-controls {
     grid-template-columns: 1fr;
   }
 

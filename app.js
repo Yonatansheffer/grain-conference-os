@@ -1663,8 +1663,25 @@ function relationshipKey(group) {
   return group.map((lead) => lead.id).slice().sort().join(",");
 }
 
-function renderArcSummary(slot, summary) {
-  slot.innerHTML = `<strong>AI summary</strong><span>${escapeHtml(summary)}</span>`;
+function renderArcSummary(slot, summary, trigger = slot.previousElementSibling) {
+  slot.innerHTML = `<div class="ai-summary-head">
+    <strong>AI summary</strong>
+    <button class="ai-summary-close" type="button" aria-label="Hide AI summary" title="Hide AI summary">&times;</button>
+  </div>
+  <span>${escapeHtml(summary)}</span>`;
+  if (trigger) {
+    trigger.textContent = "Hide AI summary";
+    trigger.setAttribute("aria-expanded", "true");
+  }
+  slot.querySelector(".ai-summary-close")?.addEventListener("click", () => hideArcSummary(slot, trigger));
+}
+
+function hideArcSummary(slot, trigger = slot.previousElementSibling) {
+  slot.innerHTML = "";
+  if (trigger) {
+    trigger.textContent = "Generate AI summary";
+    trigger.setAttribute("aria-expanded", "false");
+  }
 }
 
 // Re-paint any summaries we have already generated after the list re-renders,
@@ -1686,15 +1703,18 @@ async function summarizeRelationshipArc(encodedIds, button) {
   if (group.length < 2) return;
   const slot = button.closest(".relationship")?.querySelector(".relationship-ai-summary");
   if (!slot) return;
+  if (slot.childElementCount) {
+    hideArcSummary(slot, button);
+    return;
+  }
   const key = relationshipKey(group);
   if (relationshipSummaryCache.has(key)) {
-    renderArcSummary(slot, relationshipSummaryCache.get(key));
+    renderArcSummary(slot, relationshipSummaryCache.get(key), button);
     return;
   }
   button.disabled = true;
-  const originalLabel = button.textContent;
   button.textContent = state.ai.key ? "Summarizing..." : "Building...";
-  renderArcSummary(slot, state.ai.key ? "Generating an AI summary..." : "Building a local summary...");
+  slot.innerHTML = `<span>${escapeHtml(state.ai.key ? "Generating an AI summary..." : "Building a local summary...")}</span>`;
   let summary;
   try {
     summary = state.ai.key ? await summarizeArcWithAi(group) : localArcSummary(group);
@@ -1702,9 +1722,8 @@ async function summarizeRelationshipArc(encodedIds, button) {
     summary = localArcSummary(group);
   }
   relationshipSummaryCache.set(key, summary);
-  renderArcSummary(slot, summary);
+  renderArcSummary(slot, summary, button);
   button.disabled = false;
-  button.textContent = originalLabel;
 }
 
 async function summarizeArcWithAi(group) {
@@ -2675,35 +2694,14 @@ function renderSettingsStatus() {
 
 function renderWeightControls() {
   const weights = { ...DEFAULT_SCORE_WEIGHTS, ...(state.scoringWeights || {}) };
-  const groups = [
-    {
-      title: "1. Core Target Qualifiers (Deal Breakers)",
-      className: "weight-group-core",
-      keys: ["industryFit", "fxExposurePain", "decisionMakerSeniority"]
-    },
-    {
-      title: "2. Operational Modifiers (Logistical Optimizers)",
-      className: "weight-group-operational",
-      keys: ["travelBudgetRoi", "audienceScale"]
-    }
-  ];
-  $("#scoreProfilePresets").innerHTML = Object.entries(SCORE_PROFILE_PRESETS)
-    .map(([key, preset]) => `<button class="score-profile-button" type="button" data-score-profile="${key}"><span aria-hidden="true">${preset.icon}</span>${escapeHtml(preset.label)}</button>`)
+  $("#weightControls").innerHTML = Object.entries(SCORE_WEIGHT_LABELS)
+    .map(([key, label]) => `<label class="weight-control">
+      <span>${escapeHtml(label)}</span>
+      <input type="range" min="0" max="100" step="1" value="${weights[key]}" data-score-weight="${key}" aria-label="${escapeHtml(label)} weight">
+      <input type="number" min="0" max="100" step="1" value="${weights[key]}" data-score-weight-number="${key}" aria-label="${escapeHtml(label)} percentage">
+      <strong data-score-share="${key}">0% share</strong>
+    </label>`)
     .join("");
-  $("#weightControls").innerHTML = groups.map((group) => `<section class="weight-group ${group.className}">
-    <h4>${escapeHtml(group.title)}</h4>
-    <div class="weight-group-controls">
-      ${group.keys.map((key) => `<label class="weight-control">
-        <span>${escapeHtml(SCORE_WEIGHT_LABELS[key])}</span>
-        <input type="range" min="0" max="100" step="1" value="${weights[key]}" data-score-weight="${key}" aria-label="${escapeHtml(SCORE_WEIGHT_LABELS[key])} weight">
-        <input type="number" min="0" max="100" step="1" value="${weights[key]}" data-score-weight-number="${key}" aria-label="${escapeHtml(SCORE_WEIGHT_LABELS[key])} percentage">
-        <strong data-score-share="${key}">0% share</strong>
-      </label>`).join("")}
-    </div>
-  </section>`).join("");
-  $$("[data-score-profile]").forEach((button) => {
-    button.addEventListener("click", () => applyScoreProfile(button.dataset.scoreProfile));
-  });
   $$("[data-score-weight]").forEach((range) => {
     range.addEventListener("input", () => syncWeightInput(range.dataset.scoreWeight, range.value));
   });
@@ -2711,7 +2709,6 @@ function renderWeightControls() {
     input.addEventListener("input", () => syncWeightInput(input.dataset.scoreWeightNumber, input.value));
   });
   updateRelativeWeightShares();
-  updateActiveScoreProfile();
 }
 
 function syncWeightInput(key, value) {
@@ -2721,20 +2718,6 @@ function syncWeightInput(key, value) {
   if (range) range.value = cleanValue;
   if (number) number.value = cleanValue;
   updateRelativeWeightShares();
-  updateActiveScoreProfile();
-}
-
-function applyScoreProfile(profileKey) {
-  const preset = SCORE_PROFILE_PRESETS[profileKey];
-  if (!preset) return;
-  Object.entries(preset.weights).forEach(([key, value]) => {
-    const range = $(`[data-score-weight="${key}"]`);
-    const number = $(`[data-score-weight-number="${key}"]`);
-    if (range) range.value = value;
-    if (number) number.value = value;
-  });
-  updateRelativeWeightShares();
-  updateActiveScoreProfile(profileKey);
 }
 
 function updateRelativeWeightShares() {
@@ -2746,22 +2729,6 @@ function updateRelativeWeightShares() {
   values.forEach(([key, value]) => {
     const badge = $(`[data-score-share="${key}"]`);
     if (badge) badge.textContent = `${total ? ((value / total) * 100).toFixed(1) : "0.0"}% share`;
-  });
-}
-
-function updateActiveScoreProfile(forcedKey = "") {
-  const current = Object.fromEntries(
-    Object.keys(DEFAULT_SCORE_WEIGHTS).map((key) => [
-      key,
-      clampWeight($(`[data-score-weight-number="${key}"]`)?.value)
-    ])
-  );
-  $$("[data-score-profile]").forEach((button) => {
-    const preset = SCORE_PROFILE_PRESETS[button.dataset.scoreProfile];
-    const active = button.dataset.scoreProfile === forcedKey ||
-      (!forcedKey && Object.entries(preset.weights).every(([key, value]) => current[key] === value));
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
   });
 }
 

@@ -18,7 +18,7 @@ function renderRelationshipCard(group) {
         ${orderedGroup.map((lead, index) => renderRelationshipTimelineStep(lead, orderedGroup[index - 1])).join("")}
       </div>
       <div class="relationship-summary-control">
-        <button class="ghost-button arc-summary-button" type="button" data-arc-summary="${encodedId}">Generate AI summary</button>
+        <button class="ghost-button arc-summary-button" type="button" data-arc-summary="${encodedId}" aria-expanded="false">Generate AI summary</button>
         <div class="relationship-ai-summary" data-summary-slot="${encodedId}" aria-live="polite"></div>
       </div>
       <div class="lead-enrichment" aria-live="polite"></div>
