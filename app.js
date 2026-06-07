@@ -8,7 +8,7 @@ let calendarDate = new Date("2026-06-01T00:00:00");
 let calendarCommittedOnly = false;
 let clusterConfig = { regions: [], windowDays: 10 };
 let visibleGapSegments = ["Fintech", "Payments", "Treasury"];
-let scoutState = { gap: null, results: [], loading: false, resolvedGapKey: "" };
+let scoutState = { gap: null, results: [], loading: false, resolvedGapKey: "", mode: "parameterized" };
 const relationshipSummaryCache = new Map();
 const hiddenRelationshipSummaries = new Set();
 // Session-state caches for the ICP Account Presence Matcher, keyed by conference
@@ -559,27 +559,39 @@ function buildAiMessageRequest(provider, messages, json) {
 }
 
 async function runScoutSearch() {
-  const prompt = $("#scoutPrompt")?.value.trim();
-  if (!prompt) {
-    $("#scoutStatus").textContent = "Enter a scout prompt or resolve the active gap first.";
-    return;
-  }
+  const query = classifyScoutQuery($("#scoutPrompt")?.value);
+  const prompt = query.prompt;
+  scoutState.mode = query.mode;
   scoutState.loading = true;
-  $("#scoutStatus").textContent = "Building structured conference candidates...";
+  $("#scoutStatus").textContent = query.mode === "global"
+    ? "Running a Global Discovery Search across remaining-year opportunities..."
+    : "Building structured conference candidates...";
   renderScoutResults();
-  const dateRange = parseScoutDateRange(prompt);
+  const dateRange = query.dateRange;
   try {
-    const rawResults = state.ai.key ? await fetchAiScoutResults(prompt, dateRange) : localScoutResults(prompt, dateRange);
+    const rawResults = state.ai.key
+      ? await fetchAiScoutResults(prompt, dateRange, query.mode)
+      : localScoutResults(prompt, dateRange);
     $("#scoutStatus").textContent = "Verifying candidate source websites...";
     scoutState.results = await processScoutResults(rawResults, dateRange);
+    if (query.mode === "global") {
+      scoutState.results = globalDiscoveryResults(scoutState.results, dateRange);
+    }
     $("#scoutStatus").textContent = scoutState.results.length
-      ? `${scoutState.results.length} source-verified candidates ready.`
+      ? query.mode === "global"
+        ? `Global Discovery Search: ${scoutState.results.length} high-ICP unbooked opportunities ready.`
+        : `${scoutState.results.length} source-verified candidates ready.`
       : scoutEmptyStateMessage();
   } catch (error) {
     $("#scoutStatus").textContent = "AI scout failed. Verifying local candidates...";
     scoutState.results = await processScoutResults(localScoutResults(prompt, dateRange), dateRange);
+    if (query.mode === "global") {
+      scoutState.results = globalDiscoveryResults(scoutState.results, dateRange);
+    }
     $("#scoutStatus").textContent = scoutState.results.length
-      ? `AI unavailable. ${scoutState.results.length} local candidates passed source verification.`
+      ? query.mode === "global"
+        ? `Global Discovery Search: ${scoutState.results.length} high-ICP unbooked opportunities ready.`
+        : `AI unavailable. ${scoutState.results.length} local candidates passed source verification.`
       : scoutEmptyStateMessage();
   } finally {
     scoutState.loading = false;
@@ -591,7 +603,7 @@ function scoutEmptyStateMessage() {
   return "No verified conferences found for this specific timeframe. Try broadening your vertical terms or check if the target regional events have announced their 2026/2027 schedules yet.";
 }
 
-async function fetchAiScoutResults(prompt, dateRange) {
+async function fetchAiScoutResults(prompt, dateRange, mode = "parameterized") {
   const content = await aiChat(
     [
       {
@@ -602,7 +614,9 @@ async function fetchAiScoutResults(prompt, dateRange) {
           "Each event must have name, startDate, endDate, city, country, region, verticals, audience, seniority, buyerDensity, fxRelevance, travelRelevance, pspRelevance, costTier, source, and pitchHook.",
           "Also return recurringAnnual, historicalMonth, and dateConfirmed when exact future dates are not announced.",
           "All evaluation criteria must use integers from 1 to 10.",
-          `Only include events overlapping ${dateRange.startDate} through ${dateRange.endDate}.`,
+          mode === "global"
+            ? `Run a broad global discovery sweep for unbooked, high-ICP events from ${dateRange.startDate} through ${dateRange.endDate}; do not require a region or vertical parameter.`
+            : `Only include events overlapping ${dateRange.startDate} through ${dateRange.endDate}.`,
           "For a known annual event with unannounced dates, set dateConfirmed to false and use its historical month block.",
           "Prioritize PSPs, payments, travel wholesalers, CFOs, treasurers, finance leaders, and enterprise FX exposure."
         ].join(" ")
@@ -612,6 +626,7 @@ async function fetchAiScoutResults(prompt, dateRange) {
         content: JSON.stringify({
           prompt,
           dateRange,
+          searchMode: mode,
           existingEvents: state.conferences.map((event) => ({
             id: event.id,
             name: event.name,
@@ -655,6 +670,31 @@ async function processScoutResults(events, dateRange) {
         piggyback: duplicate ? "" : piggybackOpportunity(hydratedEvent)
       };
     });
+}
+
+function globalDiscoveryResults(verifiedResults, dateRange) {
+  const external = verifiedResults
+    .filter((result) => !result.duplicate && scoreConference(result.event) >= 68);
+  const externalNames = new Set(external.map((result) => normalizeConferenceName(result.event.name)));
+  const directoryFallback = state.conferences
+    .filter((event) => !isCommittedConference(event))
+    .filter((event) => event.startDate >= dateRange.startDate && (event.endDate || event.startDate) <= dateRange.endDate)
+    .filter((event) => scoreConference(event) >= 68)
+    .filter((event) => !externalNames.has(normalizeConferenceName(event.name)))
+    .map((event) => ({
+      event: {
+        ...event,
+        verificationStatus: "Directory",
+        tentative: false
+      },
+      duplicate: null,
+      existingOpportunity: true,
+      pitchHook: scoutPitchHook(event),
+      piggyback: piggybackOpportunity(event)
+    }));
+  return [...external, ...directoryFallback]
+    .sort((a, b) => scoreConference(b.event) - scoreConference(a.event))
+    .slice(0, 8);
 }
 
 function sanitizeScoutEvent(event, dateRange) {
@@ -1389,6 +1429,9 @@ function renderScoutResults() {
   $$("[data-add-scout-event]").forEach((button) => {
     button.addEventListener("click", () => addScoutEventToDirectory(button.dataset.addScoutEvent));
   });
+  $$("[data-open-scout-conference]").forEach((button) => {
+    button.addEventListener("click", () => openConferenceDetail(button.dataset.openScoutConference));
+  });
 }
 
 function renderGapSegmentFilter(verticals) {
@@ -1423,34 +1466,35 @@ function renderGapSegmentFilter(verticals) {
 
 function renderGapCard(vertical) {
   const relevant = state.conferences.filter((c) => c.verticals.includes(vertical));
-  const committed = relevant.filter((c) => isCommittedConference(c));
-  const uncommitted = relevant.filter((c) => !isCommittedConference(c));
+  const coverage = calculateSegmentCoverage(relevant, {
+    scoreEvent: scoreConference,
+    isCommitted: isCommittedConference
+  });
+  const committed = coverage.committedEvents;
+  const uncommitted = coverage.uncommittedEvents;
   const avg = relevant.length ? Math.round(relevant.reduce((sum, c) => sum + scoreConference(c), 0) / relevant.length) : 0;
-  const ratio = relevant.length ? committed.length / relevant.length : 0;
-  const progress = Math.round(ratio * 100);
-  const fullyCovered = committed.length > 0 && uncommitted.length === 0;
   const dataGap = relevant.length === 0;
-  const highValueUncommitted = uncommitted.filter((c) => scoreConference(c) >= 68);
-  const underInvested = !fullyCovered && !dataGap && (progress < 100 || highValueUncommitted.length > 0);
   const missedReach = uncommitted.reduce((sum, c) => sum + (Number(c.audience) || 0), 0);
-  const tone = fullyCovered ? "healthy" : (dataGap ? "danger" : (underInvested ? "warning" : "healthy"));
   const status = gapCardStatus({
     vertical,
-    fullyCovered,
     dataGap,
-    underInvested,
+    coverage,
     uncommitted,
     missedReach
   });
-  return `<div class="gap gap-${tone}">
+  const coverageMethod = coverage.method === "score" ? "weighted by event score" : "based on event count";
+  return `<div class="gap gap-${coverage.tier.tone}">
     <div class="gap-head">
       <strong>${vertical}</strong>
-      <span>${progress}% covered</span>
+      <div class="gap-coverage-summary">
+        <span class="gap-tier-badge gap-tier-${coverage.tier.key}">${coverage.tier.label}</span>
+        <span>${coverage.percentage}% covered</span>
+      </div>
     </div>
     <div class="gap-progress" aria-label="${vertical} committed coverage">
-      <span style="width:${Math.min(100, progress)}%"></span>
+      <span style="width:${coverage.percentage}%"></span>
     </div>
-    <p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}.</p>
+    <p>${committed.length}/${relevant.length} committed. Average ICP score ${avg}. Coverage ${coverageMethod}.</p>
     ${status}
     ${renderVerticalScoutUtility(vertical)}
   </div>`;
@@ -1460,22 +1504,32 @@ function isCommittedConference(conference) {
   return ["Committed", "Approved", "Confirmed", "Booked"].includes(conference?.status);
 }
 
-function gapCardStatus({ vertical, fullyCovered, dataGap, underInvested, uncommitted, missedReach }) {
-  if (fullyCovered) {
-    return `<p class="gap-status gap-status-covered">Fully Covered</p>
-      <p class="muted">All known ${escapeHtml(vertical)} events are covered. Great job!</p>`;
-  }
+function gapCardStatus({ vertical, dataGap, coverage, uncommitted, missedReach }) {
   if (dataGap) {
     return `<p class="gap-status heat">Under-invested: critical pipeline gap.</p>
       <p class="muted">No known ${escapeHtml(vertical)} events are currently listed in the directory.</p>`;
   }
-  if (underInvested && uncommitted.length) {
+  if (coverage.tier.key === "good") {
+    const detail = uncommitted.length
+      ? `Primary high-value ${escapeHtml(vertical)} opportunities are covered; ${uncommitted.length} lower-priority ${uncommitted.length === 1 ? "event remains" : "events remain"} available.`
+      : `All known ${escapeHtml(vertical)} events are covered. Great job!`;
+    return `<p class="gap-status gap-status-covered">Good coverage: primary opportunities secured.</p>
+      <p class="muted">${detail}</p>`;
+  }
+  if (coverage.tier.key === "medium" && uncommitted.length) {
+    const eventIds = uncommitted.map((conference) => conference.id).join(",");
+    return `<p class="gap-status gap-status-medium">Moderate investment: additional coverage recommended.</p>
+      <p class="muted gap-cost">Missing out on ${missedReach.toLocaleString()} potential reach across ${uncommitted.length} uncommitted events.</p>
+      <button class="gap-action" type="button" data-gap-opportunities="${escapeHtml(vertical)}" data-gap-event-ids="${escapeHtml(eventIds)}">View Opportunities in Table</button>`;
+  }
+  if (uncommitted.length) {
     const eventIds = uncommitted.map((conference) => conference.id).join(",");
     return `<p class="gap-status heat">Under-invested: local opportunities available.</p>
       <p class="muted gap-cost">Missing out on ${missedReach.toLocaleString()} potential reach across ${uncommitted.length} uncommitted events.</p>
       <button class="gap-action" type="button" data-gap-opportunities="${escapeHtml(vertical)}" data-gap-event-ids="${escapeHtml(eventIds)}">View Opportunities in Table</button>`;
   }
-  return `<p class="gap-status muted">Coverage looks proportional.</p>`;
+  return `<p class="gap-status heat">Under-invested: critical pipeline gap.</p>
+    <p class="muted">No committed ${escapeHtml(vertical)} coverage is currently available.</p>`;
 }
 
 function renderVerticalScoutUtility(segmentName) {
