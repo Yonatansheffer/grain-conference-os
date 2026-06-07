@@ -569,30 +569,38 @@ async function runScoutSearch() {
   renderScoutResults();
   const dateRange = query.dateRange;
   try {
+    if (query.mode === "global" && !state.ai.key) {
+      scoutState.results = directoryDiscoveryFallback(dateRange);
+      $("#scoutStatus").textContent = directoryFallbackStatus(scoutState.results.length, "Connect an AI provider to search live external sources.");
+      return;
+    }
     const rawResults = state.ai.key
       ? await fetchAiScoutResults(prompt, dateRange, query.mode)
       : localScoutResults(prompt, dateRange);
     $("#scoutStatus").textContent = "Verifying candidate source websites...";
-    scoutState.results = await processScoutResults(rawResults, dateRange);
-    if (query.mode === "global") {
-      scoutState.results = globalDiscoveryResults(scoutState.results, dateRange);
-    }
+    const verifiedResults = await processScoutResults(rawResults, dateRange);
+    scoutState.results = query.mode === "global"
+      ? globalDiscoveryResults(verifiedResults, dateRange)
+      : verifiedResults;
+    const usingDirectoryFallback = query.mode === "global" && !hasExternalScoutResults(scoutState.results);
     $("#scoutStatus").textContent = scoutState.results.length
       ? query.mode === "global"
-        ? `Global Discovery Search: ${scoutState.results.length} high-ICP unbooked opportunities ready.`
+        ? usingDirectoryFallback
+          ? directoryFallbackStatus(scoutState.results.length, "The live provider returned no source-verified candidates.")
+          : `Global Discovery Search: ${scoutState.results.length} live, source-verified opportunities ready.`
         : `${scoutState.results.length} source-verified candidates ready.`
       : scoutEmptyStateMessage();
   } catch (error) {
-    $("#scoutStatus").textContent = "AI scout failed. Verifying local candidates...";
-    scoutState.results = await processScoutResults(localScoutResults(prompt, dateRange), dateRange);
     if (query.mode === "global") {
-      scoutState.results = globalDiscoveryResults(scoutState.results, dateRange);
+      scoutState.results = directoryDiscoveryFallback(dateRange);
+      $("#scoutStatus").textContent = directoryFallbackStatus(scoutState.results.length, "The live provider request failed.");
+    } else {
+      $("#scoutStatus").textContent = "AI scout failed. Verifying local candidates...";
+      scoutState.results = await processScoutResults(localScoutResults(prompt, dateRange), dateRange);
+      $("#scoutStatus").textContent = scoutState.results.length
+        ? `AI unavailable. ${scoutState.results.length} local candidates passed source verification.`
+        : scoutEmptyStateMessage();
     }
-    $("#scoutStatus").textContent = scoutState.results.length
-      ? query.mode === "global"
-        ? `Global Discovery Search: ${scoutState.results.length} high-ICP unbooked opportunities ready.`
-        : `AI unavailable. ${scoutState.results.length} local candidates passed source verification.`
-      : scoutEmptyStateMessage();
   } finally {
     scoutState.loading = false;
     renderScoutResults();
@@ -615,7 +623,13 @@ async function fetchAiScoutResults(prompt, dateRange, mode = "parameterized") {
           "Also return recurringAnnual, historicalMonth, and dateConfirmed when exact future dates are not announced.",
           "All evaluation criteria must use integers from 1 to 10.",
           mode === "global"
-            ? `Run a broad global discovery sweep for unbooked, high-ICP events from ${dateRange.startDate} through ${dateRange.endDate}; do not require a region or vertical parameter.`
+            ? [
+                `Use the system-generated discovery target: "${prompt}".`,
+                `Search for current external event candidates from ${dateRange.startDate} through ${dateRange.endDate}.`,
+                "Prioritize official conference websites and return each event's direct, active source URL.",
+                "Do not limit candidates to the supplied existing directory; use it only for semantic deduplication.",
+                "Do not return an event without a plausible external source URL."
+              ].join(" ")
             : `Only include events overlapping ${dateRange.startDate} through ${dateRange.endDate}.`,
           "For a known annual event with unannounced dates, set dateConfirmed to false and use its historical month block.",
           "Prioritize PSPs, payments, travel wholesalers, CFOs, treasurers, finance leaders, and enterprise FX exposure."
@@ -640,7 +654,7 @@ async function fetchAiScoutResults(prompt, dateRange, mode = "parameterized") {
     ],
     { json: true }
   );
-  return JSON.parse(content || "{}").events || [];
+  return parseScoutEventPayload(content);
 }
 
 async function processScoutResults(events, dateRange) {
@@ -673,14 +687,18 @@ async function processScoutResults(events, dateRange) {
 }
 
 function globalDiscoveryResults(verifiedResults, dateRange) {
-  const external = verifiedResults
-    .filter((result) => !result.duplicate && scoreConference(result.event) >= 68);
-  const externalNames = new Set(external.map((result) => normalizeConferenceName(result.event.name)));
-  const directoryFallback = state.conferences
+  return preferExternalScoutResults(
+    verifiedResults,
+    directoryDiscoveryFallback(dateRange),
+    scoreConference
+  );
+}
+
+function directoryDiscoveryFallback(dateRange) {
+  return state.conferences
     .filter((event) => !isCommittedConference(event))
     .filter((event) => event.startDate >= dateRange.startDate && (event.endDate || event.startDate) <= dateRange.endDate)
     .filter((event) => scoreConference(event) >= 68)
-    .filter((event) => !externalNames.has(normalizeConferenceName(event.name)))
     .map((event) => ({
       event: {
         ...event,
@@ -691,10 +709,19 @@ function globalDiscoveryResults(verifiedResults, dateRange) {
       existingOpportunity: true,
       pitchHook: scoutPitchHook(event),
       piggyback: piggybackOpportunity(event)
-    }));
-  return [...external, ...directoryFallback]
+    }))
     .sort((a, b) => scoreConference(b.event) - scoreConference(a.event))
     .slice(0, 8);
+}
+
+function hasExternalScoutResults(results) {
+  return results.some((result) => !result.existingOpportunity);
+}
+
+function directoryFallbackStatus(count, reason) {
+  return count
+    ? `${reason} Showing ${count} high-ICP directory opportunities as a fallback.`
+    : `${reason} ${scoutEmptyStateMessage()}`;
 }
 
 function sanitizeScoutEvent(event, dateRange) {
